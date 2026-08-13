@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 set -eu
 
-SOURCE="${1:-ontheoasis13/My-WhiteBoard}"
+SOURCE="${1:-ontheoasis13/MyWhiteBoard}"
 REF="${2:-main}"
 
 codex plugin marketplace add "$SOURCE" --ref "$REF"

@@ -2,7 +2,7 @@
 
 Public beta support is provided through GitHub Issues:
 
-<https://github.com/ontheoasis13/My-WhiteBoard/issues>
+<https://github.com/ontheoasis13/MyWhiteBoard/issues>
 
 ## Before opening an issue
 

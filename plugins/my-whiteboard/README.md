@@ -23,7 +23,7 @@ Normal user-scoped routes do not require the secret; they verify the JWT and use
 After this repository is pushed to GitHub, install it on any computer with Codex:
 
 ```sh
-codex plugin marketplace add OWNER/REPOSITORY --ref main
+codex plugin marketplace add ontheoasis13/MyWhiteBoard --ref main
 codex plugin add my-whiteboard@my-whiteboard
 ```
 

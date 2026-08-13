@@ -6,7 +6,7 @@ Only the latest public beta version on the `main` branch is supported during the
 
 ## Report a vulnerability
 
-Use GitHub's private **Report a vulnerability** feature on this repository when it is available. If it is not available, open a minimal issue at <https://github.com/ontheoasis13/My-WhiteBoard/issues> requesting a private reporting channel.
+Use GitHub's private **Report a vulnerability** feature on this repository when it is available. If it is not available, open a minimal issue at <https://github.com/ontheoasis13/MyWhiteBoard/issues> requesting a private reporting channel.
 
 Do not publish exploit details, private board content, credentials, authentication links, tokens, API keys, or personal data in a public issue.
 

@@ -26,7 +26,7 @@ Supabase row-level security limits access to the board owner, explicitly added m
 
 ## Retention and deletion
 
-Local files remain until the user deletes them. Cloud records remain until the associated board or account data is deleted by an authorized user or project operator. During the beta, users can request help through <https://github.com/ontheoasis13/My-WhiteBoard/issues>; do not post personal data publicly. Open a minimal issue asking for a private contact channel.
+Local files remain until the user deletes them. Cloud records remain until the associated board or account data is deleted by an authorized user or project operator. During the beta, users can request help through <https://github.com/ontheoasis13/MyWhiteBoard/issues>; do not post personal data publicly. Open a minimal issue asking for a private contact channel.
 
 ## Security and limitations
 

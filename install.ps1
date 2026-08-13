@@ -1,5 +1,5 @@
 param(
-  [string]$Source = "ontheoasis13/My-WhiteBoard",
+  [string]$Source = "ontheoasis13/MyWhiteBoard",
   [string]$Ref = "main"
 )
 

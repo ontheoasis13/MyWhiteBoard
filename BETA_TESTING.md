@@ -26,7 +26,7 @@ Thank you for testing My Whiteboard. The goal of this beta is to validate instal
 
 ## Reporting a problem
 
-Open an issue at <https://github.com/ontheoasis13/My-WhiteBoard/issues> and include:
+Open an issue at <https://github.com/ontheoasis13/MyWhiteBoard/issues> and include:
 
 - A short title
 - Windows, macOS, or Linux and OS version

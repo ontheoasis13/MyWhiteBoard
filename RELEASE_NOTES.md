@@ -1,5 +1,12 @@
 # Release Notes
 
+## Public Beta 2 — 2026-08-13
+
+- Corrected the GitHub marketplace source to `ontheoasis13/MyWhiteBoard`
+- Added repository and homepage metadata to the plugin manifest
+- Verified the latest Chinese contact-form board and its 20 revision snapshots
+- Revalidated the plugin and its JSON, SVG, and PNG export smoke tests
+
 ## Public Beta 1 — 2026-08-13
 
 - Editable local-first whiteboard canvas
