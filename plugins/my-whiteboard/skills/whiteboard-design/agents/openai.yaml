@@ -1,0 +1,4 @@
+interface:
+  display_name: "Whiteboard Design"
+  short_description: "Create, sync, and revise collaborative whiteboards"
+  default_prompt: "Use $whiteboard-design to create a collaborative whiteboard and render it inline."

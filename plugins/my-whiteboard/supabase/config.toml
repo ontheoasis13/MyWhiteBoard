@@ -1,0 +1,3 @@
+[functions.whiteboard-api]
+verify_jwt = false
+
