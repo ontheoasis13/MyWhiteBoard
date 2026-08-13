@@ -1,4 +1,4 @@
-# My Whiteboard — Public Beta 2
+# My Whiteboard — Public Beta 5
 
 My Whiteboard is an installable Codex plugin for creating editable whiteboards, UI wireframes, flowcharts, mind maps, and architecture sketches. This public beta includes a local-first canvas, version history, exports, optional Supabase sign-in, cross-device sync, sharing, and Realtime collaboration.
 

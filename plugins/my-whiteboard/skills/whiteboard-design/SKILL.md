@@ -9,14 +9,22 @@ Build editable visual structure, not a flattened picture. Store every board loca
 
 ## Workflow
 
-1. For a new board, call `create_board`. Use the closest template when one exists.
+1. For a new board, call `create_board`. Use the closest template when one exists. For a coding task, call `create_code_board` with the project root so the board lives in `<project>/.codex/whiteboards`.
 2. Add the full first-pass composition in one `add_elements` call when practical.
-3. Call `render_board` so the user can inspect and edit the canvas inline or fullscreen. Use `open_board` as a fallback when inline UI is unavailable.
+3. Call `render_board` to return a direct local editor URL. The plugin intentionally avoids iframe embedding because Codex may block nested loopback pages; use the returned URL or `open_board` for the editable canvas.
 4. Before changing an existing board, call `query_elements`; when the user says “selected/current elements,” call `get_board_context`. Update only the relevant IDs.
 5. Use `layout_board` for repeated cards or nodes. Preserve deliberate manual positioning elsewhere.
 6. Export only when requested. JSON is the editable source; SVG and PNG are delivery formats.
 7. Use `get_storage_info` when the user asks where boards are saved. Use `set_storage_directory` only after the user names or approves the destination.
 8. Use `get_board_history` before restoring a prior version. Call `restore_board_version` only after the user identifies the target revision.
+
+## Code-task workflow
+
+- Use `create_code_board` for architecture, dependency, implementation-plan, and debugging boards tied to a repository.
+- Keep each meaningful node linked with `link_code_elements` using a relative file, symbol, line, status, risk tags, and test references.
+- Call `get_board_context` before acting on the user's current selection; selected code nodes are structured context for Codex.
+- Call `analyze_code_board` before presenting a plan or declaring a code-flow board complete. It reports linked files, edge counts, dangling edges, risks, and test references.
+- Keep project boards in version control when the user wants a durable team artifact. Personal boards remain in the default Documents folder.
 
 ## Visual rules
 

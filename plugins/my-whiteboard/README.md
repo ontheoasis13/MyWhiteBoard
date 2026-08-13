@@ -2,6 +2,8 @@
 
 A portable, local-first whiteboard plugin for Codex with professional editing, inline/fullscreen UI, local version history, and optional Supabase authentication, sync, sharing, and Realtime collaboration.
 
+For coding work, create a project board with `create_code_board`. Project boards live in `<project>/.codex/whiteboards`, can link nodes to files and symbols, and expose dependency, risk, dangling-edge, and test-reference analysis through `analyze_code_board`.
+
 ## Professional editor
 
 - Multi-select, marquee selection, grouped dragging, copy/paste, duplicate, lock, group/ungroup

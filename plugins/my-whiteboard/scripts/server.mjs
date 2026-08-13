@@ -25,14 +25,17 @@ const CONFIG_ROOT = process.env.MY_WHITEBOARD_CONFIG_HOME
   ? resolveUserPath(process.env.MY_WHITEBOARD_CONFIG_HOME)
   : PLATFORM_CONFIG_ROOT;
 const CONFIG_FILE = path.join(CONFIG_ROOT, "settings.json");
+const PROJECT_INDEX_FILE = path.join(CONFIG_ROOT, "project-index.json");
 const DEFAULT_BOARD_ROOT = path.join(os.homedir(), "Documents", "My Whiteboards");
 const VERSION = JSON.parse(await readFile(path.join(ROOT, ".codex-plugin", "plugin.json"), "utf8")).version;
 const TYPES = new Set(["rectangle", "ellipse", "diamond", "text", "note", "arrow", "line"]);
+const CODE_EXTENSIONS = new Set([".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".py", ".go", ".rs", ".java", ".kt", ".cs", ".rb", ".php", ".swift"]);
 const STYLE_KEYS = new Set(["fill", "stroke", "strokeWidth", "color", "fontSize", "fontFamily", "radius", "opacity", "textAlign", "fontWeight"]);
 const MIME = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml; charset=utf-8", ".json": "application/json; charset=utf-8" };
 let httpServer;
 let httpPort;
 let boardRoot = DEFAULT_BOARD_ROOT;
+let projectIndex = {};
 const selections = new Map();
 const WIDGET_URI = "ui://my-whiteboard/canvas-v3.html";
 
@@ -53,6 +56,7 @@ async function loadStorageSettings() {
 }
 boardRoot = await loadStorageSettings();
 await mkdir(boardRoot, { recursive: true });
+try { projectIndex = JSON.parse(await readFile(PROJECT_INDEX_FILE, "utf8")); } catch { projectIndex = {}; }
 
 function send(message) { process.stdout.write(`${JSON.stringify(message)}\n`); }
 function ok(id, result) { send({ jsonrpc: "2.0", id, result }); }
@@ -62,7 +66,18 @@ function slug(value) {
   return ascii || `board-${Date.now()}`;
 }
 function boardPath(boardId) { return path.join(boardRoot, `${slug(boardId)}.whiteboard.json`); }
-function historyRoot(boardId) { return path.join(boardRoot, ".history", slug(boardId)); }
+function projectBoardRoot(projectRoot) { return path.join(resolveUserPath(projectRoot), ".codex", "whiteboards"); }
+function projectBoardPath(projectRoot, boardId) { return path.join(projectBoardRoot(projectRoot), `${slug(boardId)}.whiteboard.json`); }
+async function persistProjectIndex() { await mkdir(CONFIG_ROOT, { recursive: true }); await writeFile(PROJECT_INDEX_FILE, `${JSON.stringify(projectIndex, null, 2)}\n`, "utf8"); }
+async function registerProjectBoard(boardId, file) { projectIndex[slug(boardId)] = file; await persistProjectIndex(); }
+async function locateBoardFile(boardId) {
+  const local = boardPath(boardId);
+  try { await stat(local); return local; } catch {}
+  const indexed = projectIndex[slug(boardId)] || projectIndex[String(boardId)];
+  if (indexed) { try { await stat(indexed); return indexed; } catch {} }
+  const error = new Error(`ENOENT: whiteboard not found: ${boardId}`); error.code = "ENOENT"; throw error;
+}
+function historyRoot(boardId, file = boardPath(boardId)) { return path.join(path.dirname(file), ".history", slug(boardId)); }
 function now() { return new Date().toISOString(); }
 function escapeXml(value = "") { return String(value).replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" })[char]); }
 function number(value, fallback) { return Number.isFinite(Number(value)) ? Number(value) : fallback; }
@@ -88,6 +103,10 @@ function normalizeElement(input, index = 0) {
   if (input.groupId) element.groupId = String(input.groupId);
   if (input.sourceId) element.sourceId = String(input.sourceId);
   if (input.targetId) element.targetId = String(input.targetId);
+  if (input.code && typeof input.code === "object") element.code = { file: String(input.code.file || ""), symbol: String(input.code.symbol || ""), line: number(input.code.line, 0) || null, kind: String(input.code.kind || "") };
+  if (input.status) element.status = String(input.status);
+  if (Array.isArray(input.riskTags)) element.riskTags = input.riskTags.map(String);
+  if (Array.isArray(input.testRefs)) element.testRefs = input.testRefs.map(String);
   if (type === "arrow" || type === "line") {
     element.points = Array.isArray(input.points) && input.points.length >= 2
       ? input.points.map((point) => [number(point?.[0], 0), number(point?.[1], 0)])
@@ -132,8 +151,72 @@ function applyTemplate(board, template) {
   ].map(normalizeElement);
   return board;
 }
+function projectContext(projectRoot, projectName = "") {
+  const root = resolveUserPath(projectRoot);
+  return { projectRoot: root, projectName: String(projectName || path.basename(root)), boardDirectory: projectBoardRoot(root) };
+}
+function codeElement(input, index = 0) {
+  const element = normalizeElement(input, index);
+  const source = input.source || input.code || input.codeRef;
+  if (source && typeof source === "object") element.code = { file: String(source.file || ""), symbol: String(source.symbol || ""), line: number(source.line, 0) || null, kind: String(source.kind || "") };
+  if (input.status) element.status = String(input.status);
+  if (Array.isArray(input.riskTags)) element.riskTags = input.riskTags.map(String);
+  if (Array.isArray(input.testRefs)) element.testRefs = input.testRefs.map(String);
+  return element;
+}
+function codeBoard(title, projectRoot, width = 1440, height = 900) {
+  const board = makeBoard(title || "Code architecture", width, height);
+  board.boardType = "code";
+  board.project = projectContext(projectRoot);
+  return board;
+}
+async function scanProjectGraph(projectRoot, maxFiles = 80) {
+  const root = resolveUserPath(projectRoot); const files = [];
+  async function visit(dir) {
+    if (files.length >= maxFiles) return;
+    let entries = []; try { entries = await readdir(dir, { withFileTypes: true }); } catch { return; }
+    for (const entry of entries) {
+      if (files.length >= maxFiles) break;
+      if (entry.name.startsWith(".") || ["node_modules", "dist", "build", "coverage", ".codex"].includes(entry.name)) continue;
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) await visit(full);
+      else if (CODE_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) files.push(full);
+    }
+  }
+  await visit(root);
+  const nodes = []; const byFile = new Map(); const cols = Math.max(1, Math.ceil(Math.sqrt(Math.max(1, files.length))));
+  for (const [index, file] of files.entries()) {
+    const rel = path.relative(root, file).replaceAll(path.sep, "/"); const id = `file-${slug(rel).slice(0, 72)}`; byFile.set(rel, id);
+    nodes.push(codeElement({ id, type: "rectangle", x: 80 + (index % cols) * 280, y: 80 + Math.floor(index / cols) * 150, width: 240, height: 100, text: path.basename(rel), style: { fill: "#eef2ff", stroke: "#6366f1", color: "#312e81", fontSize: 16, radius: 12 }, code: { file: rel, kind: "file" }, status: "待处理" }));
+  }
+  const edges = [];
+  for (const file of files) {
+    const rel = path.relative(root, file).replaceAll(path.sep, "/"); let source = ""; try { source = await readFile(file, "utf8"); } catch {}
+    const imports = [...source.matchAll(/(?:from\s*["']|require\(\s*["']|import\s*["'])([^"']+)["']/g)].map((match) => match[1]).filter((value) => value.startsWith("."));
+    for (const specifier of imports) {
+      const base = path.posix.normalize(path.posix.join(path.posix.dirname(rel), specifier)); const candidates = [base, `${base}.js`, `${base}.ts`, `${base}.tsx`, `${base}/index.js`, `${base}/index.ts`]; const target = candidates.find((candidate) => byFile.has(candidate));
+      if (!target || target === rel) continue; edges.push(normalizeElement({ id: `edge-${randomUUID().slice(0, 8)}`, type: "arrow", x: 0, y: 0, points: [[0, 0], [1, 1]], sourceId: byFile.get(rel), targetId: byFile.get(target), style: { stroke: "#94a3b8", strokeWidth: 2 } }));
+    }
+  }
+  return { root, files: files.length, elements: [...nodes, ...edges] };
+}
+function collectCodeAnalysis(board) {
+  const nodes = board.elements.filter((e) => e.code || e.type === "diamond" || e.type === "rectangle" || e.type === "ellipse");
+  const edges = board.elements.filter((e) => e.type === "arrow" || e.type === "line");
+  const risks = [];
+  const tests = [];
+  const fileCounts = new Map();
+  for (const node of nodes) {
+    if (node.code?.file) fileCounts.set(node.code.file, (fileCounts.get(node.code.file) || 0) + 1);
+    for (const risk of node.riskTags || []) risks.push({ element_id: node.id, risk });
+    for (const test of node.testRefs || []) tests.push({ element_id: node.id, test });
+  }
+  for (const [file, count] of fileCounts) if (count > 3) risks.push({ file, risk: "high fan-in on one file" });
+  const dangling = edges.filter((e) => e.sourceId && !nodes.some((n) => n.id === e.sourceId) || e.targetId && !nodes.some((n) => n.id === e.targetId)).map((e) => e.id);
+  return { nodes: nodes.length, edges: edges.length, risks, tests, dangling_edges: dangling, files: [...fileCounts.entries()].map(([file, count]) => ({ file, count })) };
+}
 async function loadBoard(boardId) {
-  const file = boardPath(boardId);
+  const file = await locateBoardFile(boardId);
   const board = JSON.parse(await readFile(file, "utf8"));
   board.elements = (board.elements || []).map(normalizeElement);
   return { board, file };
@@ -144,13 +227,13 @@ async function saveBoard(board, file = boardPath(board.id)) {
   const temp = `${file}.${process.pid}.tmp`;
   await writeFile(temp, `${JSON.stringify(board, null, 2)}\n`, "utf8");
   await rename(temp, file);
-  const versions = historyRoot(board.id);
+  const versions = historyRoot(board.id, file);
   await mkdir(versions, { recursive: true });
   await writeFile(path.join(versions, `${String(board.revision).padStart(12, "0")}.json`), `${JSON.stringify(board, null, 2)}\n`, "utf8");
   return file;
 }
 async function listHistory(boardId) {
-  const folder = historyRoot(boardId);
+  const folder = historyRoot(boardId, await locateBoardFile(boardId));
   let files = []; try { files = await readdir(folder); } catch { return []; }
   const versions = [];
   for (const name of files.filter((item) => item.endsWith(".json")).sort().reverse().slice(0, 100)) {
@@ -158,7 +241,7 @@ async function listHistory(boardId) {
   }
   return versions;
 }
-async function readHistory(boardId, revision) { return JSON.parse(await readFile(path.join(historyRoot(boardId), `${String(revision).padStart(12, "0")}.json`), "utf8")); }
+async function readHistory(boardId, revision) { return JSON.parse(await readFile(path.join(historyRoot(boardId, await locateBoardFile(boardId)), `${String(revision).padStart(12, "0")}.json`), "utf8")); }
 function svgFor(board) {
   const defs = `<defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#64748b"/></marker></defs>`;
   const render = (e) => {
@@ -180,11 +263,12 @@ async function ensureHttp() {
       if (url.pathname.startsWith("/api/boards/")) {
         const rest = decodeURIComponent(url.pathname.slice("/api/boards/".length));
         const [boardId, action, revision] = rest.split("/");
+        if (action === "analysis" && req.method === "GET") { const { board } = await loadBoard(boardId); res.writeHead(200, { "content-type": MIME[".json"], "cache-control": "no-store" }); res.end(JSON.stringify({ board_id: board.id, analysis: collectCodeAnalysis(board) })); return; }
         if (action === "history" && req.method === "GET") { if (revision) { const board = await readHistory(boardId, revision); res.writeHead(200, { "content-type": MIME[".json"], "cache-control": "no-store" }); res.end(JSON.stringify({ board })); return; } const versions = await listHistory(boardId); res.writeHead(200, { "content-type": MIME[".json"], "cache-control": "no-store" }); res.end(JSON.stringify({ versions })); return; }
         if (req.method === "GET") { const { board } = await loadBoard(boardId); res.writeHead(200, { "content-type": MIME[".json"], "cache-control": "no-store" }); res.end(JSON.stringify(board)); return; }
-        if (req.method === "PUT") { let body = ""; for await (const chunk of req) body += chunk; const incoming = JSON.parse(body); const { board, file } = await loadBoard(boardId); incoming.id = board.id; incoming.createdAt = board.createdAt; incoming.elements = (incoming.elements || []).map(normalizeElement); await saveBoard(incoming, file); res.writeHead(200, { "content-type": MIME[".json"] }); res.end(JSON.stringify({ saved: true, revision: incoming.revision })); return; }
+        if (req.method === "PUT") { const chunks = []; for await (const chunk of req) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)); const incoming = JSON.parse(Buffer.concat(chunks).toString("utf8")); const { board, file } = await loadBoard(boardId); incoming.id = board.id; incoming.createdAt = board.createdAt; incoming.elements = (incoming.elements || []).map(normalizeElement); await saveBoard(incoming, file); res.writeHead(200, { "content-type": MIME[".json"] }); res.end(JSON.stringify({ saved: true, revision: incoming.revision })); return; }
       }
-      if (url.pathname.startsWith("/api/selection/")) { const boardId = decodeURIComponent(url.pathname.slice("/api/selection/".length)); if (req.method === "GET") { res.writeHead(200, { "content-type": MIME[".json"], "cache-control": "no-store" }); res.end(JSON.stringify(selections.get(boardId) || { ids: [], elements: [] })); return; } if (req.method === "PUT") { let body = ""; for await (const chunk of req) body += chunk; selections.set(boardId, JSON.parse(body)); res.writeHead(200, { "content-type": MIME[".json"] }); res.end(JSON.stringify({ saved: true })); return; } }
+      if (url.pathname.startsWith("/api/selection/")) { const boardId = decodeURIComponent(url.pathname.slice("/api/selection/".length)); if (req.method === "GET") { res.writeHead(200, { "content-type": MIME[".json"], "cache-control": "no-store" }); res.end(JSON.stringify(selections.get(boardId) || { ids: [], elements: [] })); return; } if (req.method === "PUT") { const chunks = []; for await (const chunk of req) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)); selections.set(boardId, JSON.parse(Buffer.concat(chunks).toString("utf8"))); res.writeHead(200, { "content-type": MIME[".json"] }); res.end(JSON.stringify({ saved: true })); return; } }
       const relative = url.pathname === "/" ? "index.html" : url.pathname.replace(/^\/+/, "");
       const file = path.resolve(WEB_ROOT, relative);
       if (!file.startsWith(WEB_ROOT)) throw new Error("Invalid path");
@@ -199,6 +283,7 @@ async function ensureHttp() {
 function content(message, data) { return { content: [{ type: "text", text: message }], structuredContent: data }; }
 const tools = [
   { name: "create_board", title: "Create local whiteboard", description: "Create a new editable local whiteboard. Templates: blank, contact-form, flowchart.", inputSchema: { type: "object", properties: { title: { type: "string" }, template: { type: "string", enum: ["blank", "contact-form", "flowchart"] }, width: { type: "number" }, height: { type: "number" } }, required: ["title"], additionalProperties: false }, annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false } },
+  { name: "create_code_board", title: "Create project code board", description: "Create a project-scoped editable architecture or implementation board under the project's .codex/whiteboards directory and seed it from source files/imports.", inputSchema: { type: "object", properties: { title: { type: "string" }, project_root: { type: "string" }, width: { type: "number" }, height: { type: "number" }, max_files: { type: "number" } }, required: ["project_root"], additionalProperties: false }, annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false } },
   { name: "list_boards", title: "List local whiteboards", description: "List locally stored whiteboards ordered by most recently modified.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } },
   { name: "open_board", title: "Open editable whiteboard", description: "Start the private local canvas and return a loopback URL for editing a board.", inputSchema: { type: "object", properties: { board_id: { type: "string" } }, required: ["board_id"], additionalProperties: false }, annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } },
   { name: "query_elements", title: "Inspect whiteboard elements", description: "Return board elements, optionally filtered by ids, type, or text. Always use before modifying an existing board.", inputSchema: { type: "object", properties: { board_id: { type: "string" }, ids: { type: "array", items: { type: "string" } }, type: { type: "string" }, text: { type: "string" } }, required: ["board_id"], additionalProperties: false }, annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } },
@@ -210,6 +295,9 @@ const tools = [
   { name: "get_storage_info", title: "Get whiteboard storage", description: "Show the active local or synced directory where editable whiteboards are stored.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } },
   { name: "set_storage_directory", title: "Set whiteboard storage", description: "Choose a local or cloud-synced directory for future whiteboard reads and writes. Existing files are not moved.", inputSchema: { type: "object", properties: { directory: { type: "string", description: "Absolute path or a path beginning with ~/" } }, required: ["directory"], additionalProperties: false }, annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false } }
   ,{ name: "get_board_context", title: "Get active whiteboard context", description: "Return the board plus the element selection currently active in the editor. Use before applying a request that refers to selected or current elements.", inputSchema: { type: "object", properties: { board_id: { type: "string" } }, required: ["board_id"], additionalProperties: false }, annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } }
+  ,{ name: "link_code_elements", title: "Link board elements to code", description: "Attach file, symbol, line, status, risk, and test references to existing board elements.", inputSchema: { type: "object", properties: { board_id: { type: "string" }, links: { type: "array", items: { type: "object", required: ["id"], additionalProperties: true } } }, required: ["board_id", "links"], additionalProperties: false }, annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false } }
+  ,{ name: "analyze_code_board", title: "Analyze code board", description: "Analyze linked code nodes, dependencies, dangling edges, risks, and test references on a project board.", inputSchema: { type: "object", properties: { board_id: { type: "string" } }, required: ["board_id"], additionalProperties: false }, annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } }
+  ,{ name: "get_project_boards", title: "List project code boards", description: "List code boards registered for a project root.", inputSchema: { type: "object", properties: { project_root: { type: "string" } }, required: ["project_root"], additionalProperties: false }, annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } }
   ,{ name: "get_board_history", title: "Get whiteboard history", description: "List up to 100 locally saved versions of a whiteboard.", inputSchema: { type: "object", properties: { board_id: { type: "string" } }, required: ["board_id"], additionalProperties: false }, annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } }
   ,{ name: "restore_board_version", title: "Restore whiteboard version", description: "Restore a previous local whiteboard version and save it as a new revision.", inputSchema: { type: "object", properties: { board_id: { type: "string" }, revision: { type: "number" } }, required: ["board_id", "revision"], additionalProperties: false }, annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false } }
   ,{ name: "render_board", title: "Show interactive whiteboard", description: "Render the editable whiteboard UI after creating or fetching a board. Use this for an inline or fullscreen visual experience.", inputSchema: { type: "object", properties: { board_id: { type: "string" } }, required: ["board_id"], additionalProperties: false }, annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }, _meta: { ui: { resourceUri: WIDGET_URI }, "openai/outputTemplate": WIDGET_URI, "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Opening whiteboard…", "openai/toolInvocation/invoked": "Whiteboard ready" } }
@@ -225,14 +313,39 @@ async function callTool(name, args = {}) {
     boardRoot = nextRoot;
     return content(`Whiteboard storage changed to ${boardRoot}. Existing files were not moved.`, { root: boardRoot, config_file: CONFIG_FILE });
   }
+  if (name === "create_code_board") {
+    const project = projectContext(args.project_root, args.project_name);
+    await mkdir(project.boardDirectory, { recursive: true });
+    let board = codeBoard(args.title || "Code architecture", project.projectRoot, args.width, args.height);
+    board.project = project;
+    let file = projectBoardPath(project.projectRoot, board.id);
+    try { await stat(file); board.id = `${board.id}-${Date.now()}`; file = projectBoardPath(project.projectRoot, board.id); } catch {}
+    const graph = await scanProjectGraph(project.projectRoot, Math.max(1, Math.min(200, number(args.max_files, 80))));
+    board.elements = graph.elements; await saveBoard(board, file); await registerProjectBoard(board.id, file);
+    return content(`Created project code board “${board.title}”.`, { board_id: board.id, path: file, project, revision: board.revision, scanned_files: graph.files, element_count: board.elements.length });
+  }
+  if (name === "get_project_boards") {
+    const project = projectContext(args.project_root); const result = [];
+    for (const [id, file] of Object.entries(projectIndex)) {
+      if (!String(file).startsWith(project.boardDirectory)) continue;
+      try { const board = JSON.parse(await readFile(file, "utf8")); result.push({ id: board.id || id, title: board.title, path: file, revision: board.revision, updatedAt: board.updatedAt, element_count: board.elements?.length || 0 }); } catch {}
+    }
+    return content(`${result.length} project code board(s).`, { project, boards: result.sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt))) });
+  }
   if (name === "get_board_history") return content("Whiteboard version history.", { board_id: args.board_id, versions: await listHistory(args.board_id) });
   if (name === "restore_board_version") { const previous = await readHistory(args.board_id, args.revision); const { board: current, file } = await loadBoard(args.board_id); previous.id = current.id; previous.createdAt = current.createdAt; previous.revision = current.revision; await saveBoard(previous, file); return content(`Restored revision ${args.revision} as revision ${previous.revision}.`, { board_id: previous.id, revision: previous.revision, restored_from: args.revision }); }
   if (name === "create_board") { let board = makeBoard(args.title, args.width, args.height); board = applyTemplate(board, args.template || "blank"); let file = boardPath(board.id); try { await stat(file); board.id = `${board.id}-${Date.now()}`; file = boardPath(board.id); } catch {} await saveBoard(board, file); return content(`Created local whiteboard “${board.title}”.`, { board_id: board.id, path: file, revision: board.revision, element_count: board.elements.length }); }
   if (name === "list_boards") { const files = (await readdir(boardRoot)).filter((file) => file.endsWith(".whiteboard.json")); const boards = []; for (const file of files) { try { const board = JSON.parse(await readFile(path.join(boardRoot, file), "utf8")); boards.push({ id: board.id, title: board.title, updatedAt: board.updatedAt, revision: board.revision, element_count: board.elements?.length || 0 }); } catch {} } boards.sort((a,b) => String(b.updatedAt).localeCompare(String(a.updatedAt))); return content(`${boards.length} local whiteboard(s).`, { boards, root: boardRoot }); }
   const { board, file } = await loadBoard(args.board_id);
+  if (name === "link_code_elements") {
+    const byId = new Map(board.elements.map((e) => [e.id, e])); const changed = [];
+    for (const link of args.links || []) { const current = byId.get(link.id); if (!current) throw new Error(`Unknown element id: ${link.id}`); const next = codeElement({ ...current, ...link, code: link.code || link.source || current.code, riskTags: link.riskTags ?? current.riskTags, testRefs: link.testRefs ?? current.testRefs }, 0); Object.assign(current, next); changed.push(current.id); }
+    await saveBoard(board, file); return content(`Linked ${changed.length} element(s) to code.`, { board_id: board.id, revision: board.revision, ids: changed });
+  }
+  if (name === "analyze_code_board") return content("Code board analysis.", { board_id: board.id, project: board.project || null, analysis: collectCodeAnalysis(board) });
   if (name === "get_board_context") { const selection = selections.get(board.id) || { ids: [], elements: [] }; return content(`${selection.ids?.length || 0} selected element(s) on “${board.title}”.`, { board, selection }); }
   if (name === "open_board") { const port = await ensureHttp(); const url = `http://127.0.0.1:${port}/?board=${encodeURIComponent(board.id)}`; return content(`Open the editable local canvas: ${url}`, { board_id: board.id, url, path: file, revision: board.revision }); }
-  if (name === "render_board") { const port = await ensureHttp(); const url = `http://127.0.0.1:${port}/?board=${encodeURIComponent(board.id)}&embedded=1`; return { ...content(`Interactive whiteboard ready for “${board.title}”.`, { board_id: board.id, title: board.title, revision: board.revision, element_count: board.elements.length, url }), _meta: { ui: { resourceUri: WIDGET_URI }, "openai/outputTemplate": WIDGET_URI } }; }
+  if (name === "render_board") { const port = await ensureHttp(); const url = `http://127.0.0.1:${port}/?board=${encodeURIComponent(board.id)}`; return content(`Open the editable whiteboard directly: ${url}`, { board_id: board.id, title: board.title, revision: board.revision, element_count: board.elements.length, url, embedded: false }); }
   if (name === "query_elements") { let elements = board.elements; if (args.ids?.length) { const ids = new Set(args.ids); elements = elements.filter((e) => ids.has(e.id)); } if (args.type) elements = elements.filter((e) => e.type === args.type); if (args.text) elements = elements.filter((e) => e.text.toLowerCase().includes(String(args.text).toLowerCase())); return content(`${elements.length} matching element(s).`, { board: { id: board.id, title: board.title, width: board.width, height: board.height, revision: board.revision }, elements }); }
   if (name === "add_elements") { const incoming = (args.elements || []).map(normalizeElement); const existing = new Set(board.elements.map((e) => e.id)); for (const element of incoming) { if (existing.has(element.id)) throw new Error(`Duplicate element id: ${element.id}`); existing.add(element.id); } board.elements.push(...incoming); await saveBoard(board, file); return content(`Added ${incoming.length} element(s).`, { board_id: board.id, revision: board.revision, ids: incoming.map((e) => e.id) }); }
   if (name === "update_elements") { const byId = new Map(board.elements.map((e) => [e.id, e])); const changed = []; for (const patch of args.elements || []) { const current = byId.get(patch.id); if (!current) throw new Error(`Unknown element id: ${patch.id}`); const next = normalizeElement({ ...current, ...patch, style: { ...current.style, ...(patch.style || {}) }, id: current.id }); Object.assign(current, next); changed.push(current.id); } await saveBoard(board, file); return content(`Updated ${changed.length} element(s).`, { board_id: board.id, revision: board.revision, ids: changed }); }

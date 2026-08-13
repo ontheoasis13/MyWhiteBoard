@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>My Whiteboard</title>
   <link rel="stylesheet" href="styles.css">
+  <style>.code-inspector{margin-top:18px;padding-top:16px;border-top:1px solid #eef0f5;display:flex;flex-direction:column;gap:10px}.code-inspector strong{color:#3f4859}.code-inspector select{border:1px solid #d9deea;border-radius:9px;padding:9px;color:#263044;background:#fbfcfe}.analysis-output{max-height:180px;overflow:auto;padding:9px;border-radius:8px;background:#111827;color:#d1fae5;font-size:11px;white-space:pre-wrap}</style>
 </head>
 <body>
   <header class="topbar">
@@ -57,6 +58,16 @@
         <div class="row"><button type="button" id="lockBtn" class="secondary">锁定</button><button type="button" id="duplicateBtn" class="secondary">复制</button></div>
         <button type="button" id="deleteBtn" class="danger">删除所选</button>
       </form>
+      <section id="codeInspector" class="code-inspector">
+        <strong>代码关联</strong>
+        <label>文件<input id="codeFileInput" placeholder="src/auth/service.ts"></label>
+        <div class="row"><label>符号<input id="codeSymbolInput" placeholder="AuthService"></label><label>行号<input id="codeLineInput" type="number" min="1"></label></div>
+        <label>状态<select id="codeStatusInput"><option value="">未设置</option><option>待处理</option><option>处理中</option><option>已完成</option><option>阻塞</option></select></label>
+        <label>风险标签<input id="riskTagsInput" placeholder="循环依赖, 高耦合"></label>
+        <label>测试引用<input id="testRefsInput" placeholder="tests/auth.test.ts"></label>
+        <button type="button" id="analyzeBtn" class="secondary">分析依赖与风险</button>
+        <pre id="analysisOutput" class="analysis-output" hidden></pre>
+      </section>
       <section class="codex-card">
         <strong>让 Codex 修改所选</strong>
         <textarea id="codexPrompt" rows="3" placeholder="例如：把这些卡片改成紫色并平均分布"></textarea>
