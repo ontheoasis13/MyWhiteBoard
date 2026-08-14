@@ -1,55 +1,51 @@
 ---
 name: whiteboard-design
-description: Create, open, inspect, revise, arrange, and export editable local whiteboards, UI wireframes, flowcharts, mind maps, architecture sketches, journeys, and freeform visual boards with the My Whiteboard MCP tools. Use whenever the user asks to draw, sketch, diagram, map, wireframe, visualize, brainstorm on a board, or modify a board previously created by this plugin.
+description: Create, open, inspect, revise, analyze, migrate, and export editable semantic whiteboards, code architecture diagrams, UI wireframes, flowcharts, mind maps, journeys, and freeform boards with the Agent-neutral My Whiteboard MCP tools. Use whenever the user asks to draw, sketch, diagram, map, wireframe, visualize, brainstorm on a board, inspect a selected board object, or modify a board previously created by this plugin.
 ---
 
 # Whiteboard Design
 
-Build editable visual structure, not a flattened picture. Store every board locally and make changes through the `my-whiteboard` tools.
+Build editable semantic structure, not a flattened picture. `Semantic Board State` in `<project>/.my-whiteboard/workspace.json` is the only authoritative board state. Excalidraw is a visual adapter; Legacy SVG is import/fallback data only.
 
-## Workflow
+## Standard workflow
 
-1. For a new board, call `create_board`. Use the closest template when one exists. For a coding task, call `create_code_board` with the project root so the board lives in `<project>/.codex/whiteboards`.
-2. Add the full first-pass composition in one `add_elements` call when practical.
-3. Call `render_board` to return a direct local editor URL. The plugin intentionally avoids iframe embedding because Codex may block nested loopback pages; use the returned URL or `open_board` for the editable canvas.
-4. Before changing an existing board, call `query_elements`; when the user says “selected/current elements,” call `get_board_context`. Update only the relevant IDs.
-5. Use `layout_board` for repeated cards or nodes. Preserve deliberate manual positioning elsewhere.
-6. Export only when requested. JSON is the editable source; SVG and PNG are delivery formats.
-7. Use `get_storage_info` when the user asks where boards are saved. Use `set_storage_directory` only after the user names or approves the destination.
-8. Use `get_board_history` before restoring a prior version. Call `restore_board_version` only after the user identifies the target revision.
+1. Call `project_create` once for a project root. Call `project_get` or `workspace_get` before editing an existing workspace.
+2. Call `board_create` for a new board. Use stable IDs and select the closest `board_type`, such as `flowchart`, `architecture`, `wireframe`, or `mindmap`.
+3. Add the first meaningful composition in one `board_apply` transaction when practical. Every update or delete must include the element's current `expected_version`.
+4. Call `workspace_open` to return the direct, token-protected local Web Workspace URL. Never request an iframe or MCP embedded resource: the workspace is deliberately standalone.
+5. When the user refers to the selected/current object, call `selection_get`. Use only the returned semantic IDs and references.
+6. Re-read with `board_get` after the user edits in Excalidraw. Treat Semantic Board State—not the raw Excalidraw scene—as authoritative.
+7. Call `board_export` only when requested. JSON is the editable semantic source; SVG and PNG are delivery formats.
+8. For incremental Agent context, call `workspace_get_changes` with the last seen Workspace Version.
 
-## Code-task workflow
+## Code workspace workflow
 
-- Use `create_code_board` for architecture, dependency, implementation-plan, and debugging boards tied to a repository.
-- Keep each meaningful node linked with `link_code_elements` using a relative file, symbol, line, status, risk tags, and test references.
-- Call `get_board_context` before acting on the user's current selection; selected code nodes are structured context for Codex.
-- Call `analyze_code_board` before presenting a plan or declaring a code-flow board complete. It reports linked files, edge counts, dangling edges, risks, and test references.
-- Keep project boards in version control when the user wants a durable team artifact. Personal boards remain in the default Documents folder.
+- Use `code_board_create` with the repository root to scan bounded source files and imports into a semantic architecture board.
+- Call `code_board_analyze` before presenting the architecture as complete. Preserve its linked file, language, import, and risk metadata.
+- Use the user's persisted selection as focused coding context. Do not read unrelated board elements when `selection_get` already identifies the target.
+- Commit `.my-whiteboard/workspace.json` only when the user wants the workspace shared through version control. Ignore transient `.my-whiteboard/lock` files.
+
+## Concurrency rules
+
+- Workspace Version orders Event Log and Delta reads; it is not a global write lock.
+- Entity Version protects individual objects. Always send `expected_version` for updates and deletes.
+- On `VERSION_CONFLICT`, stop overwriting, call `board_get` or `workspace_get`, compare the changed entity, then apply a new explicit patch.
+- Unrelated entities may be updated concurrently without conflict.
+
+## Legacy migration
+
+- Call `legacy_discover` before `legacy_import`.
+- Import is copy-only and idempotent by source hash. Never edit or delete `.codex/whiteboards` during migration.
+- After import, all new edits go to Semantic Board State. Do not create live two-way synchronization with Legacy SVG.
 
 ## Visual rules
 
 - Establish hierarchy with size, spacing, and at most one strong accent color.
 - Use 8 px spacing increments and leave at least 24 px between unrelated groups.
-- Keep text labels concise. Put detailed explanation beside the board, not inside every shape.
-- Use stable, descriptive IDs such as `email-input` or `decision-approved` when supplying IDs.
-- Prefer solid fills and low-roughness geometry for UI work; use warmer notes and looser spacing for brainstorming.
-- Keep important content inside the board dimensions.
+- Keep labels concise; store detailed meaning in semantic properties and project context.
+- Prefer stable descriptive IDs such as `auth-service`, `email-input`, or `decision-approved`.
+- Use `node`, `edge`, `text`, `note`, `section`, and `group` semantic kinds. Read [schema.md](references/schema.md) for non-trivial payloads.
 
-## Editing rules
+## Privacy and portability
 
-- Query first; never guess IDs on an existing board.
-- Patch only changed fields with `update_elements`.
-- Use `delete_elements` only when the user asked to remove content or removal is necessary for the requested redesign.
-- Treat edits made in the browser as authoritative; re-query after the user says they changed the board.
-
-## Supported elements
-
-Use `rectangle`, `ellipse`, `diamond`, `text`, `note`, `arrow`, and `line`. Read [schema.md](references/schema.md) only when constructing non-trivial element payloads or debugging validation.
-
-## Local privacy
-
-Boards default to the user's Documents folder in `My Whiteboards`. The user may point storage at a OneDrive, Dropbox, iCloud Drive, or other synced folder with `set_storage_directory`; do not claim sync is active unless that directory is actually managed by a sync provider. `open_board` returns a loopback URL accessible only while the local MCP server is running.
-
-## Cloud collaboration
-
-The editor can sign in to the configured Supabase project for cross-device sync, version history, share links, and Realtime updates. Treat the local JSON file as the offline source and Supabase as the authenticated synchronization layer. Never request or expose the Supabase secret/service-role key in the canvas; client access must use the publishable key and RLS.
+The local workspace and loopback URL stay on the user's machine. The URL works only while this MCP server process is running and includes a short-lived secret token. Never expose a Supabase secret/service-role key in a board, log, tool result, repository, or browser client. Cloud sync, tasks, decisions, artifacts, handoffs, and messages are enabled only when their corresponding workspace tools are present; do not pretend an unavailable milestone is complete.

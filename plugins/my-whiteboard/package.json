@@ -4,7 +4,26 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test tests/core.test.mjs tests/legacy-migration.test.mjs tests/concurrency.test.mjs",
-    "test:core": "node --test tests/core.test.mjs tests/legacy-migration.test.mjs tests/concurrency.test.mjs"
+    "build": "npm run build:workspace",
+    "build:workspace": "vite build --config vite.config.mjs && node scripts/copy-excalidraw-assets.mjs",
+    "test": "node --test tests/core.test.mjs tests/legacy-migration.test.mjs tests/concurrency.test.mjs tests/excalidraw-adapter.test.mjs tests/workspace-http.test.mjs",
+    "test:core": "node --test tests/core.test.mjs tests/legacy-migration.test.mjs tests/concurrency.test.mjs tests/excalidraw-adapter.test.mjs tests/workspace-http.test.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@excalidraw/excalidraw": "0.18.1",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "18.3.31",
+    "@types/react-dom": "18.3.7",
+    "@vitejs/plugin-react": "6.0.5",
+    "typescript": "7.0.2",
+    "vite": "8.2.1"
+  },
+  "overrides": {
+    "lodash-es": "4.18.1",
+    "nanoid": "6.0.1"
   }
 }
