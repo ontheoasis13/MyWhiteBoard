@@ -34,6 +34,8 @@ type Workspace = {
     contexts: Record<string, { id: string; title: string; content: string; kind?: string }>;
     decisions: Record<string, { id: string; title: string; rationale: string; status?: string }>;
     artifacts: Record<string, { id: string; title: string; kind: string; path?: string | null; uri?: string | null }>;
+    handoffs: Record<string, { id: string; title: string; summary: string; status: string; fromAgentId: string; toAgentId: string }>;
+    messages: Record<string, { id: string; body: string; kind: string; fromAgentId: string; toAgentId?: string | null; channel?: string }>;
   };
 };
 
@@ -196,6 +198,8 @@ export function App() {
   const contexts = Object.values(workspace.entities.contexts || {});
   const decisions = Object.values(workspace.entities.decisions || {});
   const artifacts = Object.values(workspace.entities.artifacts || {});
+  const handoffs = Object.values(workspace.entities.handoffs || {});
+  const messages = Object.values(workspace.entities.messages || {});
 
   return (
     <main className="workspace-shell">
@@ -220,6 +224,8 @@ export function App() {
         <div className="domain-list compact">{decisions.slice(0, 3).map((decision) => <article key={decision.id}><span>{decision.status || "proposed"}</span><strong>{decision.title}</strong><p>{decision.rationale}</p></article>)}{!decisions.length && <p className="empty-copy">No decisions yet.</p>}</div>
         <div className="section-label domain-heading">Artifacts</div>
         <div className="domain-list compact">{artifacts.slice(0, 3).map((artifact) => <article key={artifact.id}><span>{artifact.kind}</span><strong>{artifact.title}</strong><p>{artifact.path || artifact.uri || "Board artifact"}</p></article>)}{!artifacts.length && <p className="empty-copy">No artifacts yet.</p>}</div>
+        <div className="section-label domain-heading">Handoffs · Messages</div>
+        <div className="domain-list compact">{handoffs.slice(-2).map((handoff) => <article key={handoff.id}><span>{handoff.status} · {handoff.fromAgentId} → {handoff.toAgentId}</span><strong>{handoff.title}</strong><p>{handoff.summary}</p></article>)}{messages.slice(-2).map((message) => <article key={message.id}><span>{message.kind} · {message.fromAgentId}</span><strong>{message.toAgentId || message.channel || "workspace"}</strong><p>{message.body}</p></article>)}{!handoffs.length && !messages.length && <p className="empty-copy">No Agent collaboration activity yet.</p>}</div>
         {ignored.length > 0 && <div className="warning"><strong>暂未持久化</strong><p>{ignored.length} 个 Excalidraw 元素尚无 Semantic 类型，仍只存在于当前会话。</p></div>}
         {error && <div className="error"><strong>需要处理</strong><p>{error}</p></div>}
       </aside>

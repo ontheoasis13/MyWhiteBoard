@@ -36,12 +36,14 @@ try {
   const initialized = await request("initialize", { protocolVersion: "2025-11-25", capabilities: {} });
   assert(initialized.result?.serverInfo?.name === "My Whiteboard Workspace", "initialize failed");
   const listed = await request("tools/list");
-  assert(listed.result.tools.length === 19, "unexpected workspace tool count");
+  assert(listed.result.tools.length === 24, "unexpected workspace tool count");
   assert(listed.result.tools.every((tool) => !tool._meta?.["openai/outputTemplate"]), "iframe output template remains");
   const project = await request("tools/call", { name: "project_create", arguments: { project_root: projectRoot, name: "Smoke Project", actor: { id: "codex", client: "codex" } } });
   assert(project.result.structuredContent.workspaceVersion === 1, "project creation failed");
   const agent = await request("tools/call", { name: "agent_connect", arguments: { project_root: projectRoot, agent: { id: "codex", displayName: "Codex", client: "codex", capabilities: ["code", "board"] } } });
   assert(agent.result.structuredContent.agent.version === 1, "Agent identity failed");
+  const claude = await request("tools/call", { name: "agent_connect", arguments: { project_root: projectRoot, agent: { id: "claude", displayName: "Claude", client: "claude", capabilities: ["review"] } } });
+  assert(claude.result.structuredContent.agent.version === 1, "second Agent identity failed");
   const context = await request("tools/call", { name: "context_apply", arguments: { project_root: projectRoot, changes: [{ op: "create", entity: { id: "goal", title: "Goal", content: "Verify Single-Agent Workspace", sources: ["README.md"] } }] } });
   assert(context.result.structuredContent.entities.goal.version === 1, "context creation failed");
   const tasks = await request("tools/call", { name: "tasks_apply", arguments: { project_root: projectRoot, changes: [{ op: "create", entity: { id: "verify", title: "Verify workspace", assigneeAgentId: "codex" } }] } });
@@ -52,6 +54,27 @@ try {
   assert(artifacts.result.structuredContent.entities.state.kind === "file", "artifact creation failed");
   const created = await request("tools/call", { name: "board_create", arguments: { project_root: projectRoot, id: "architecture", title: "Architecture", elements: [{ id: "api", kind: "node", semanticType: "service", label: "API" }, { id: "db", kind: "node", semanticType: "database", label: "DB" }, { id: "api-db", kind: "edge", semanticType: "dependency", label: "reads", properties: { sourceId: "api", targetId: "db" } }] } });
   assert(created.result.structuredContent.board.elements.api.version === 1, "semantic board creation failed");
+  const handoff = await request("tools/call", { name: "handoff_create", arguments: { project_root: projectRoot, handoff: { id: "review-handoff", title: "Review", summary: "Review the architecture board", fromAgentId: "codex", toAgentId: "claude", taskIds: ["verify"], artifactIds: ["state"], boardIds: ["architecture"] } } });
+  assert(handoff.result.structuredContent.handoff.version === 1, "handoff creation failed");
+  const accepted = await request("tools/call", { name: "handoff_update", arguments: { project_root: projectRoot, handoff_id: "review-handoff", expected_version: 1, patch: { status: "accepted" }, actor: { id: "claude", client: "claude" } } });
+  assert(accepted.result.structuredContent.handoff.version === 2, "handoff update failed");
+  const message = await request("tools/call", { name: "message_send", arguments: { project_root: projectRoot, message: { fromAgentId: "claude", toAgentId: "codex", kind: "response", body: "Review started" } } });
+  const inbox = await request("tools/call", { name: "messages_get", arguments: { project_root: projectRoot, agent_id: "codex" } });
+  assert(inbox.result.structuredContent.messages.some((item) => item.id === message.result.structuredContent.message.id), "Agent message failed");
+const synchronized = await request("tools/call", {
+  name: "agent_sync",
+  arguments: {
+    project_root: projectRoot,
+    agent: {
+      id: "codex",
+      displayName: "Codex",
+      client: "codex",
+      capabilities: ["code", "board"],
+    },
+    since_version: accepted.result.structuredContent.workspaceVersion,
+  },
+});
+  assert(synchronized.result.structuredContent.events.some((event) => event.type === "message.created"), "Agent Delta sync failed");
   const applied = await request("tools/call", { name: "board_apply", arguments: { project_root: projectRoot, board_id: "architecture", changes: [{ op: "update", id: "api", expectedVersion: 1, patch: { label: "Gateway" } }] } });
   assert(applied.result.structuredContent.elementVersions.api === 2, "entity version update failed");
   const stale = await request("tools/call", { name: "board_apply", arguments: { project_root: projectRoot, board_id: "architecture", changes: [{ op: "update", id: "api", expectedVersion: 1, patch: { label: "Stale" } }] } });

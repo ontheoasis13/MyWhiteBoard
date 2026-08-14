@@ -19,6 +19,8 @@ export const BOARD_KINDS = new Set(["node", "edge", "text", "note", "group", "se
 export const TASK_STATUSES = new Set(["todo", "in_progress", "blocked", "done", "cancelled"]);
 export const DECISION_STATUSES = new Set(["proposed", "accepted", "rejected", "superseded"]);
 export const AGENT_STATUSES = new Set(["connected", "idle", "working", "offline", "error"]);
+export const HANDOFF_STATUSES = new Set(["open", "accepted", "completed", "cancelled"]);
+export const MESSAGE_KINDS = new Set(["update", "request", "response", "conflict", "system"]);
 
 const ENTITY_DEFAULTS = Object.freeze({
   contexts: { kind: "project", title: "Context", content: "", sources: [], tags: [] },
@@ -26,6 +28,8 @@ const ENTITY_DEFAULTS = Object.freeze({
   decisions: { status: "proposed", rationale: "", alternatives: [], boardElementIds: [] },
   artifacts: { kind: "file", status: "current", path: null, uri: null, boardId: null, metadata: {} },
   agents: { status: "connected", capabilities: [], metadata: {} },
+  handoffs: { status: "open", taskIds: [], artifactIds: [], boardIds: [], metadata: {} },
+  messages: { kind: "update", toAgentId: null, channel: "workspace", relatedEntityRefs: [], readBy: [] },
   selections: { elementIds: [] },
 });
 
@@ -198,6 +202,33 @@ export function validateDomainEntity(collection, entity, workspace) {
     requireText(entity, "client", collection);
     if (!AGENT_STATUSES.has(entity.status)) throw new ValidationError(`Invalid Agent status: ${entity.status}`, { entityId: entity.id });
     requireStringArray(entity, "capabilities", collection);
+  }
+  if (collection === "handoffs") {
+    requireText(entity, "title", collection);
+    requireText(entity, "summary", collection);
+    requireText(entity, "fromAgentId", collection);
+    requireText(entity, "toAgentId", collection);
+    if (entity.fromAgentId === entity.toAgentId) throw new ValidationError("Handoff requires two different Agents.", { entityId: entity.id });
+    if (!HANDOFF_STATUSES.has(entity.status)) throw new ValidationError(`Invalid handoff status: ${entity.status}`, { entityId: entity.id });
+    for (const field of ["taskIds", "artifactIds", "boardIds"]) requireStringArray(entity, field, collection);
+    if (workspace) {
+      if (!workspace.entities.agents[entity.fromAgentId] || !workspace.entities.agents[entity.toAgentId]) throw new ValidationError("Handoff Agent does not exist.", { entityId: entity.id });
+      for (const id of entity.taskIds) if (!workspace.entities.tasks[id]) throw new ValidationError("Handoff Task does not exist.", { entityId: entity.id, taskId: id });
+      for (const id of entity.artifactIds) if (!workspace.entities.artifacts[id]) throw new ValidationError("Handoff Artifact does not exist.", { entityId: entity.id, artifactId: id });
+      for (const id of entity.boardIds) if (!workspace.entities.boards[id]) throw new ValidationError("Handoff Board does not exist.", { entityId: entity.id, boardId: id });
+    }
+  }
+  if (collection === "messages") {
+    requireText(entity, "fromAgentId", collection);
+    requireText(entity, "body", collection);
+    if (!MESSAGE_KINDS.has(entity.kind)) throw new ValidationError(`Invalid message kind: ${entity.kind}`, { entityId: entity.id });
+    if (!entity.toAgentId && !entity.channel) throw new ValidationError("Message requires toAgentId or channel.", { entityId: entity.id });
+    requireStringArray(entity, "readBy", collection);
+    if (!Array.isArray(entity.relatedEntityRefs)) throw new ValidationError("messages.relatedEntityRefs must be an array.", { entityId: entity.id });
+    if (workspace) {
+      if (!workspace.entities.agents[entity.fromAgentId]) throw new ValidationError("Message sender Agent does not exist.", { entityId: entity.id, agentId: entity.fromAgentId });
+      if (entity.toAgentId && !workspace.entities.agents[entity.toAgentId]) throw new ValidationError("Message recipient Agent does not exist.", { entityId: entity.id, agentId: entity.toAgentId });
+    }
   }
   if (collection === "selections") {
     requireText(entity, "boardId", collection);

@@ -6,8 +6,8 @@
   "scripts": {
     "build": "npm run build:workspace",
     "build:workspace": "vite build --config vite.config.mjs && node scripts/copy-excalidraw-assets.mjs",
-    "test": "node --test tests/core.test.mjs tests/domain.test.mjs tests/legacy-migration.test.mjs tests/concurrency.test.mjs tests/excalidraw-adapter.test.mjs tests/workspace-http.test.mjs",
-    "test:core": "node --test tests/core.test.mjs tests/domain.test.mjs tests/legacy-migration.test.mjs tests/concurrency.test.mjs tests/excalidraw-adapter.test.mjs tests/workspace-http.test.mjs",
+    "test": "node --test tests/core.test.mjs tests/domain.test.mjs tests/collaboration.test.mjs tests/legacy-migration.test.mjs tests/concurrency.test.mjs tests/excalidraw-adapter.test.mjs tests/workspace-http.test.mjs",
+    "test:core": "node --test tests/core.test.mjs tests/domain.test.mjs tests/collaboration.test.mjs tests/legacy-migration.test.mjs tests/concurrency.test.mjs tests/excalidraw-adapter.test.mjs tests/workspace-http.test.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

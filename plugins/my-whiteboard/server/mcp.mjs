@@ -7,13 +7,18 @@ import {
   applyDomainChanges,
   applyWorkspaceTransaction,
   connectAgent,
+  createHandoff,
   createBoardEntity,
   createProjectCodeBoard,
   createProjectWorkspace,
   discoverLegacyBoards,
   getChangesSince,
+  getMessages,
   importLegacyBoards,
   readWorkspace,
+  sendMessage,
+  syncAgent,
+  updateHandoff,
   workspacePaths,
 } from "../core/index.mjs";
 import { exportSemanticBoard } from "../export/semantic-export.mjs";
@@ -125,6 +130,41 @@ export const workspaceTools = [
     annotations: mutating,
   },
   {
+    name: "agent_sync",
+    title: "Connect Agent and get Delta",
+    description: "Refresh Agent identity and return Event Log entries after since_version in one synchronization call.",
+    inputSchema: { type: "object", properties: { project_root: { type: "string" }, agent: { type: "object" }, since_version: { type: "integer", minimum: 0 }, actor: { type: "object" } }, required: ["project_root", "agent", "since_version"], additionalProperties: false },
+    annotations: mutating,
+  },
+  {
+    name: "handoff_create",
+    title: "Create Agent Handoff",
+    description: "Create a versioned handoff between two connected Agents with shared summary and Task, Artifact, and Board references.",
+    inputSchema: { type: "object", properties: { project_root: { type: "string" }, handoff: { type: "object" }, actor: { type: "object" } }, required: ["project_root", "handoff"], additionalProperties: false },
+    annotations: mutating,
+  },
+  {
+    name: "handoff_update",
+    title: "Update Agent Handoff",
+    description: "Accept, complete, cancel, or revise a handoff using expected_version optimistic concurrency.",
+    inputSchema: { type: "object", properties: { project_root: { type: "string" }, handoff_id: { type: "string" }, expected_version: { type: "integer", minimum: 1 }, patch: { type: "object" }, actor: { type: "object" } }, required: ["project_root", "handoff_id", "expected_version", "patch"], additionalProperties: false },
+    annotations: mutating,
+  },
+  {
+    name: "message_send",
+    title: "Send Agent Message",
+    description: "Append a versioned Agent-to-Agent or workspace-channel message with related entity references.",
+    inputSchema: { type: "object", properties: { project_root: { type: "string" }, message: { type: "object" }, actor: { type: "object" } }, required: ["project_root", "message"], additionalProperties: false },
+    annotations: mutating,
+  },
+  {
+    name: "messages_get",
+    title: "Get Agent Messages",
+    description: "Read messages filtered by Agent, channel, and optional Workspace Version cursor.",
+    inputSchema: { type: "object", properties: { project_root: { type: "string" }, agent_id: { type: "string" }, channel: { type: "string" }, after_version: { type: "integer", minimum: 0 } }, required: ["project_root"], additionalProperties: false },
+    annotations: readOnly,
+  },
+  {
     name: "legacy_discover",
     title: "Discover Beta 5 boards",
     description: "List legacy .codex/whiteboards files available for read-only migration.",
@@ -228,6 +268,27 @@ export async function callWorkspaceTool(name, args, httpService) {
     await createProjectWorkspace(args.project_root, { actor: args.actor || args.agent });
     const result = await connectAgent(args.project_root, args.agent, args.actor || args.agent);
     return content(`Agent “${result.agent.displayName}” connected from ${result.agent.client}.`, { agent: result.agent, workspaceVersion: result.workspaceVersion, events: result.events });
+  }
+  if (name === "agent_sync") {
+    await createProjectWorkspace(args.project_root, { actor: args.actor || args.agent });
+    const result = await syncAgent(args.project_root, { agent: args.agent, actor: args.actor, since_version: args.since_version });
+    return content(`Agent “${result.agent.displayName}” synchronized to Workspace v${result.workspaceVersion}.`, result);
+  }
+  if (name === "handoff_create") {
+    const result = await createHandoff(args.project_root, args.handoff, args.actor || args.handoff);
+    return content(`Created handoff “${result.handoff.title}” from ${result.handoff.fromAgentId} to ${result.handoff.toAgentId}.`, { handoff: result.handoff, workspaceVersion: result.workspaceVersion, events: result.events });
+  }
+  if (name === "handoff_update") {
+    const result = await updateHandoff(args.project_root, { id: args.handoff_id, expected_version: args.expected_version, patch: args.patch }, args.actor);
+    return content(`Handoff “${result.handoff.title}” is ${result.handoff.status}.`, { handoff: result.handoff, workspaceVersion: result.workspaceVersion, events: result.events });
+  }
+  if (name === "message_send") {
+    const result = await sendMessage(args.project_root, args.message, args.actor || args.message);
+    return content(`Message sent by ${result.message.fromAgentId}.`, { message: result.message, workspaceVersion: result.workspaceVersion, events: result.events });
+  }
+  if (name === "messages_get") {
+    const result = await getMessages(args.project_root, { agent_id: args.agent_id, channel: args.channel, after_version: args.after_version });
+    return content(`${result.messages.length} message(s) at Workspace v${result.workspaceVersion}.`, result);
   }
   if (name === "legacy_discover") {
     const files = await discoverLegacyBoards(args.project_root);

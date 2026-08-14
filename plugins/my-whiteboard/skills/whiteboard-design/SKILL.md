@@ -39,6 +39,13 @@ Build editable semantic structure, not a flattened picture. `Semantic Board Stat
 - On `VERSION_CONFLICT`, stop overwriting, call `board_get` or `workspace_get`, compare the changed entity, then apply a new explicit patch.
 - Unrelated entities may be updated concurrently without conflict.
 
+## Multi-Agent collaboration
+
+- Call `agent_sync` with the last seen Workspace Version when an Agent resumes. Use the returned Delta instead of rereading the entire Event Log.
+- Call `handoff_create` only after both Agents and every referenced Task, Artifact, and Board exist. The sender and recipient must be different.
+- The recipient calls `handoff_update` with the current `expected_version` to accept or complete the work. On conflict, re-read the handoff from `workspace_get` before retrying.
+- Use `message_send` for durable Agent updates, requests, responses, and conflict notices; use `messages_get` with an Agent/channel filter and version cursor for focused inbox reads.
+
 ## Legacy migration
 
 - Call `legacy_discover` before `legacy_import`.
@@ -55,4 +62,4 @@ Build editable semantic structure, not a flattened picture. `Semantic Board Stat
 
 ## Privacy and portability
 
-The local workspace and loopback URL stay on the user's machine. The URL works only while this MCP server process is running and includes a short-lived secret token. Never expose a Supabase secret/service-role key in a board, log, tool result, repository, or browser client. Cloud sync, handoffs, and messages are enabled only when their corresponding workspace tools are present; do not pretend an unavailable milestone is complete.
+The local workspace and loopback URL stay on the user's machine. The URL works only while this MCP server process is running and includes a short-lived secret token. Never expose a Supabase secret/service-role key in a board, log, tool result, repository, or browser client. Cloud sync is enabled only when its corresponding tools are present; do not pretend an unavailable milestone is complete.
