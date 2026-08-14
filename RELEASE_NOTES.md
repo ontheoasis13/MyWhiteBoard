@@ -17,7 +17,7 @@ Known alpha limitations:
 
 - Supabase 登录用户 JWT 目前需要在启动 Codex 前通过环境变量提供。
 - Cloud Pull 会拒绝覆盖未推送的本地变化；自动冲突合并不在本 Alpha 范围。
-- WorkBuddy 5.3.5 已通过核心模块完成真实接收/回信闭环；由于服务器尚未在连接器管理中受信任，标准 MCP Transport 工具直调仍待验收。
+- WorkBuddy 5.3.5 已完成真实接收/回信闭环，并通过受信任的 `my-whiteboard` stdio Server 完成标准 MCP Transport 工具直调。
 - Excalidraw 生产包较大，构建会出现非阻断 chunk-size 警告。
 
 ## Public Beta 5 — 2026-08-13

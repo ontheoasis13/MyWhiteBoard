@@ -86,7 +86,7 @@ MY_WHITEBOARD_SUPABASE_ACCESS_TOKEN=<signed-in user JWT>
 - 独立 Web Workspace 已完成真实浏览器检查，无 iframe
 - Supabase 事务/RLS 契约已在目标项目用回滚测试验证
 - Codex CLI 0.144.3 真实创建 Agent、Task 和 Handoff 成功
-- WorkBuddy 5.3.5 已完成真实客户端核心闭环：Workspace v9、Handoff v2/accepted、Message 已回传；标准 MCP Transport 仍需在连接器管理中信任服务器后补做工具直调验收
+- WorkBuddy 5.3.5 已完成真实客户端闭环：Workspace v9、Handoff v2/accepted、Message 已回传，并通过 `mcp__my-whiteboard__workspace_get` 完成标准 MCP Transport 工具直调
 
 测试指南见 [BETA_TESTING.md](BETA_TESTING.md)，发布前检查见 [PUBLIC_BETA_CHECKLIST.md](PUBLIC_BETA_CHECKLIST.md)。
 

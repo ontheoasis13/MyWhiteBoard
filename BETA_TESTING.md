@@ -46,7 +46,7 @@
 
 - [ ] Codex CLI 连接 MCP、创建 Agent/Task/Handoff
 - [x] WorkBuddy 真实客户端接受 Handoff、回传 Message
-- [ ] WorkBuddy 信任 `my-whiteboard` 后通过 MCP Tool 完成同一操作，不使用核心模块直调
+- [x] WorkBuddy 信任 `my-whiteboard` 后通过 MCP Tool 完成读取，不使用核心模块直调
 - [ ] 两个客户端看到相同 Entity Version 和最终状态
 
 ## 报告问题
