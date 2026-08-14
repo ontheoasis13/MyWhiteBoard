@@ -1,0 +1,42 @@
+{
+  "name": "my-whiteboard",
+  "version": "0.1.0+codex.20260813084845",
+  "description": "A portable collaborative whiteboard for Codex with professional editing, inline UI, Supabase sync, version history, sharing, and export.",
+  "author": {
+    "name": "NCKZ"
+  },
+  "homepage": "https://github.com/ontheoasis13/MyWhiteBoard",
+  "repository": "https://github.com/ontheoasis13/MyWhiteBoard",
+  "license": "MIT",
+  "keywords": [
+    "whiteboard",
+    "wireframe",
+    "diagram",
+    "canvas",
+    "local-first"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "My Whiteboard",
+    "shortDescription": "Collaborative editable whiteboards for Codex",
+    "longDescription": "Create, inspect, edit, arrange, sync, share, and export structured whiteboards. Use professional multi-select editing, inline/fullscreen plugin UI, local version history, and optional Supabase authentication and Realtime collaboration across devices.",
+    "developerName": "NCKZ",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive",
+      "Write",
+      "Cross-platform",
+      "Local-first",
+      "Cloud sync",
+      "Realtime collaboration",
+      "Version history"
+    ],
+    "defaultPrompt": [
+      "Sketch a UI wireframe on my whiteboard.",
+      "Create a flowchart and arrange it clearly.",
+      "Open my latest whiteboard and refine it."
+    ],
+    "brandColor": "#6D5EF7"
+  }
+}

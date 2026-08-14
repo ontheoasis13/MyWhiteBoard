@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "my-whiteboard": {
+      "command": "node",
+      "args": ["./scripts/server.mjs"],
+      "cwd": "."
+    }
+  }
+}

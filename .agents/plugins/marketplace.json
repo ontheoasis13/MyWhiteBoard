@@ -1,0 +1,20 @@
+{
+  "name": "my-whiteboard",
+  "interface": {
+    "displayName": "My Whiteboard"
+  },
+  "plugins": [
+    {
+      "name": "my-whiteboard",
+      "source": {
+        "source": "local",
+        "path": "./plugins/my-whiteboard"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}
