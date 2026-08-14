@@ -22,6 +22,7 @@ import {
   workspacePaths,
 } from "../core/index.mjs";
 import { exportSemanticBoard } from "../export/semantic-export.mjs";
+import { SupabaseWorkspaceAdapter } from "../adapters/supabase-adapter.mjs";
 import { createWorkspaceHttpService } from "./workspace-http.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -29,6 +30,17 @@ const VERSION = JSON.parse(await readFile(path.join(ROOT, ".codex-plugin", "plug
 
 const readOnly = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
 const mutating = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false };
+const actorSchema = { type: "object", properties: { id: { type: "string" }, displayName: { type: "string" }, client: { type: "string" } }, required: ["id"], additionalProperties: true };
+const agentSchema = { type: "object", properties: { id: { type: "string" }, displayName: { type: "string" }, client: { type: "string" }, status: { type: "string", enum: ["connected", "idle", "working", "offline", "error"] }, capabilities: { type: "array", items: { type: "string" } }, metadata: { type: "object" } }, required: ["id", "displayName", "client"], additionalProperties: false };
+const domainChangeSchema = {
+  oneOf: [
+    { type: "object", properties: { op: { const: "create" }, entity: { type: "object" } }, required: ["op", "entity"], additionalProperties: false },
+    { type: "object", properties: { op: { const: "update" }, id: { type: "string" }, expected_version: { type: "integer", minimum: 1 }, patch: { type: "object" } }, required: ["op", "id", "expected_version", "patch"], additionalProperties: false },
+    { type: "object", properties: { op: { const: "delete" }, id: { type: "string" }, expected_version: { type: "integer", minimum: 1 } }, required: ["op", "id", "expected_version"], additionalProperties: false },
+  ],
+};
+const handoffSchema = { type: "object", properties: { id: { type: "string" }, title: { type: "string" }, summary: { type: "string" }, fromAgentId: { type: "string" }, toAgentId: { type: "string" }, status: { type: "string", enum: ["open", "accepted", "completed", "cancelled"] }, taskIds: { type: "array", items: { type: "string" } }, artifactIds: { type: "array", items: { type: "string" } }, boardIds: { type: "array", items: { type: "string" } }, metadata: { type: "object" } }, required: ["title", "summary", "fromAgentId", "toAgentId"], additionalProperties: false };
+const messageSchema = { type: "object", properties: { id: { type: "string" }, fromAgentId: { type: "string" }, toAgentId: { type: ["string", "null"] }, channel: { type: "string" }, kind: { type: "string", enum: ["update", "request", "response", "conflict", "system"] }, body: { type: "string" }, relatedEntityRefs: { type: "array", items: { type: "object", properties: { collection: { type: "string" }, id: { type: "string" } }, required: ["collection", "id"], additionalProperties: false } }, readBy: { type: "array", items: { type: "string" } } }, required: ["fromAgentId", "body"], additionalProperties: false };
 
 export const workspaceTools = [
   {
@@ -98,49 +110,49 @@ export const workspaceTools = [
     name: "context_apply",
     title: "Apply Shared Context changes",
     description: "Batch create, update, or delete versioned project/code context records. Updates and deletes require expected_version.",
-    inputSchema: { type: "object", properties: { project_root: { type: "string" }, changes: { type: "array", items: { type: "object" }, minItems: 1 }, actor: { type: "object" } }, required: ["project_root", "changes"], additionalProperties: false },
+    inputSchema: { type: "object", properties: { project_root: { type: "string" }, changes: { type: "array", items: domainChangeSchema, minItems: 1 }, actor: actorSchema }, required: ["project_root", "changes"], additionalProperties: false },
     annotations: mutating,
   },
   {
     name: "tasks_apply",
     title: "Apply Task changes",
     description: "Batch create, update, or delete versioned tasks with status, priority, dependencies, Agent assignment, and board references.",
-    inputSchema: { type: "object", properties: { project_root: { type: "string" }, changes: { type: "array", items: { type: "object" }, minItems: 1 }, actor: { type: "object" } }, required: ["project_root", "changes"], additionalProperties: false },
+    inputSchema: { type: "object", properties: { project_root: { type: "string" }, changes: { type: "array", items: domainChangeSchema, minItems: 1 }, actor: actorSchema }, required: ["project_root", "changes"], additionalProperties: false },
     annotations: mutating,
   },
   {
     name: "decisions_apply",
     title: "Apply Decision changes",
     description: "Batch create, update, or delete versioned decisions with rationale, status, alternatives, and board references.",
-    inputSchema: { type: "object", properties: { project_root: { type: "string" }, changes: { type: "array", items: { type: "object" }, minItems: 1 }, actor: { type: "object" } }, required: ["project_root", "changes"], additionalProperties: false },
+    inputSchema: { type: "object", properties: { project_root: { type: "string" }, changes: { type: "array", items: domainChangeSchema, minItems: 1 }, actor: actorSchema }, required: ["project_root", "changes"], additionalProperties: false },
     annotations: mutating,
   },
   {
     name: "artifacts_apply",
     title: "Apply Artifact changes",
     description: "Batch create, update, or delete versioned file, URI, and board artifacts.",
-    inputSchema: { type: "object", properties: { project_root: { type: "string" }, changes: { type: "array", items: { type: "object" }, minItems: 1 }, actor: { type: "object" } }, required: ["project_root", "changes"], additionalProperties: false },
+    inputSchema: { type: "object", properties: { project_root: { type: "string" }, changes: { type: "array", items: domainChangeSchema, minItems: 1 }, actor: actorSchema }, required: ["project_root", "changes"], additionalProperties: false },
     annotations: mutating,
   },
   {
     name: "agent_connect",
     title: "Connect or refresh Agent identity",
     description: "Upsert one Agent identity with client, status, capabilities, metadata, last-seen time, and Entity Version.",
-    inputSchema: { type: "object", properties: { project_root: { type: "string" }, agent: { type: "object" }, actor: { type: "object" } }, required: ["project_root", "agent"], additionalProperties: false },
+    inputSchema: { type: "object", properties: { project_root: { type: "string" }, agent: agentSchema, actor: actorSchema }, required: ["project_root", "agent"], additionalProperties: false },
     annotations: mutating,
   },
   {
     name: "agent_sync",
     title: "Connect Agent and get Delta",
     description: "Refresh Agent identity and return Event Log entries after since_version in one synchronization call.",
-    inputSchema: { type: "object", properties: { project_root: { type: "string" }, agent: { type: "object" }, since_version: { type: "integer", minimum: 0 }, actor: { type: "object" } }, required: ["project_root", "agent", "since_version"], additionalProperties: false },
+    inputSchema: { type: "object", properties: { project_root: { type: "string" }, agent: agentSchema, since_version: { type: "integer", minimum: 0 }, actor: actorSchema }, required: ["project_root", "agent", "since_version"], additionalProperties: false },
     annotations: mutating,
   },
   {
     name: "handoff_create",
     title: "Create Agent Handoff",
     description: "Create a versioned handoff between two connected Agents with shared summary and Task, Artifact, and Board references.",
-    inputSchema: { type: "object", properties: { project_root: { type: "string" }, handoff: { type: "object" }, actor: { type: "object" } }, required: ["project_root", "handoff"], additionalProperties: false },
+    inputSchema: { type: "object", properties: { project_root: { type: "string" }, handoff: handoffSchema, actor: actorSchema }, required: ["project_root", "handoff"], additionalProperties: false },
     annotations: mutating,
   },
   {
@@ -154,7 +166,7 @@ export const workspaceTools = [
     name: "message_send",
     title: "Send Agent Message",
     description: "Append a versioned Agent-to-Agent or workspace-channel message with related entity references.",
-    inputSchema: { type: "object", properties: { project_root: { type: "string" }, message: { type: "object" }, actor: { type: "object" } }, required: ["project_root", "message"], additionalProperties: false },
+    inputSchema: { type: "object", properties: { project_root: { type: "string" }, message: messageSchema, actor: actorSchema }, required: ["project_root", "message"], additionalProperties: false },
     annotations: mutating,
   },
   {
@@ -162,6 +174,34 @@ export const workspaceTools = [
     title: "Get Agent Messages",
     description: "Read messages filtered by Agent, channel, and optional Workspace Version cursor.",
     inputSchema: { type: "object", properties: { project_root: { type: "string" }, agent_id: { type: "string" }, channel: { type: "string" }, after_version: { type: "integer", minimum: 0 } }, required: ["project_root"], additionalProperties: false },
+    annotations: readOnly,
+  },
+  {
+    name: "cloud_status",
+    title: "Get optional cloud sync status",
+    description: "Report whether user-scoped Supabase sync is configured and show non-secret local sync cursors.",
+    inputSchema: { type: "object", properties: { project_root: { type: "string" } }, required: ["project_root"], additionalProperties: false },
+    annotations: readOnly,
+  },
+  {
+    name: "cloud_push",
+    title: "Push Semantic Workspace to Supabase",
+    description: "Push versioned Semantic Workspace Entities through RLS and object-level optimistic concurrency. Supabase Secret Keys are never accepted.",
+    inputSchema: { type: "object", properties: { project_root: { type: "string" }, actor: { type: "object" } }, required: ["project_root"], additionalProperties: false },
+    annotations: mutating,
+  },
+  {
+    name: "cloud_pull",
+    title: "Pull Supabase Workspace Delta",
+    description: "Apply cloud Event Log entries after the saved Cloud Workspace Version. Refuses to overwrite unsynchronized local changes.",
+    inputSchema: { type: "object", properties: { project_root: { type: "string" }, actor: { type: "object" } }, required: ["project_root"], additionalProperties: false },
+    annotations: mutating,
+  },
+  {
+    name: "cloud_get_changes",
+    title: "Read Supabase Workspace Delta",
+    description: "Read cloud events after a Cloud Workspace Version without changing the local Workspace.",
+    inputSchema: { type: "object", properties: { project_root: { type: "string" }, since_version: { type: "integer", minimum: 0 } }, required: ["project_root", "since_version"], additionalProperties: false },
     annotations: readOnly,
   },
   {
@@ -289,6 +329,26 @@ export async function callWorkspaceTool(name, args, httpService) {
   if (name === "messages_get") {
     const result = await getMessages(args.project_root, { agent_id: args.agent_id, channel: args.channel, after_version: args.after_version });
     return content(`${result.messages.length} message(s) at Workspace v${result.workspaceVersion}.`, result);
+  }
+  if (name === "cloud_status") {
+    const result = await new SupabaseWorkspaceAdapter().status(args.project_root);
+    return content(result.configured ? "Optional Supabase sync is configured." : "Optional Supabase sync is not configured.", result);
+  }
+  if (name === "cloud_push") {
+    const result = await new SupabaseWorkspaceAdapter().push(args.project_root, args.actor);
+    return content(`Pushed ${result.changes} Semantic Workspace change(s) to Cloud Workspace v${result.cloudWorkspaceVersion}.`, result);
+  }
+  if (name === "cloud_pull") {
+    const result = await new SupabaseWorkspaceAdapter().pull(args.project_root, args.actor);
+    return content(`Applied ${result.applied} cloud change(s) from ${result.events} event(s).`, result);
+  }
+  if (name === "cloud_get_changes") {
+    const adapter = new SupabaseWorkspaceAdapter();
+    const workspace = await readWorkspace(args.project_root);
+    const project = await adapter.findProject(workspace.project.id);
+    if (!project) throw Object.assign(new Error("Cloud Workspace not found."), { code: "NOT_FOUND" });
+    const events = await adapter.getDelta(project.id, args.since_version);
+    return content(`${events.length} cloud event(s) since Cloud Workspace v${args.since_version}.`, { workspaceId: project.id, fromVersion: args.since_version, cloudWorkspaceVersion: events.length ? Number(events.at(-1).workspace_version) : Number(project.workspace_version), events });
   }
   if (name === "legacy_discover") {
     const files = await discoverLegacyBoards(args.project_root);

@@ -52,6 +52,14 @@ Build editable semantic structure, not a flattened picture. `Semantic Board Stat
 - Import is copy-only and idempotent by source hash. Never edit or delete `.codex/whiteboards` during migration.
 - After import, all new edits go to Semantic Board State. Do not create live two-way synchronization with Legacy SVG.
 
+## Optional cloud sync
+
+- Call `cloud_status` before any cloud operation. Local work never requires cloud configuration.
+- Use `cloud_push` before `cloud_pull` when the local Workspace has unsynchronized changes.
+- Use `cloud_get_changes` for a read-only Cloud Workspace Delta. Workspace Version orders cloud events; Entity Version still protects individual objects.
+- On a cloud conflict, do not force an overwrite. Read the local Workspace and cloud Delta, then resolve the named Entity explicitly.
+- Never accept, request, print, or store a Supabase Secret/Service Role Key. Cloud tools use only a Publishable Key and a signed-in user's JWT supplied to the MCP server environment.
+
 ## Visual rules
 
 - Establish hierarchy with size, spacing, and at most one strong accent color.
@@ -62,4 +70,4 @@ Build editable semantic structure, not a flattened picture. `Semantic Board Stat
 
 ## Privacy and portability
 
-The local workspace and loopback URL stay on the user's machine. The URL works only while this MCP server process is running and includes a short-lived secret token. Never expose a Supabase secret/service-role key in a board, log, tool result, repository, or browser client. Cloud sync is enabled only when its corresponding tools are present; do not pretend an unavailable milestone is complete.
+The local workspace and loopback URL stay on the user's machine. The URL works only while this MCP server process is running and includes a short-lived secret token. Never expose a Supabase Secret/Service Role Key or user JWT in a board, log, tool result, repository, or browser client. Cloud sync is opt-in and must be reported as unavailable when `cloud_status` says it is not configured.

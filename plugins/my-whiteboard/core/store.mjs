@@ -313,3 +313,140 @@ export async function updateProject(projectRoot, { expectedVersion, patch, actor
     return { transactionId, workspaceVersion, project: clone(project), events: [event] };
   });
 }
+
+function cloudEventFields(event) {
+  return {
+    type: String(event.eventType || event.event_type || ""),
+    collection: String(event.collection || ""),
+    entityId: String(event.entityId || event.entity_id || ""),
+    payload: clone(event.payload || {}),
+    cloudWorkspaceVersion: Number(event.workspaceVersion ?? event.workspace_version ?? 0),
+    cloudEventIndex: Number(event.eventIndex ?? event.event_index ?? 0),
+  };
+}
+
+function sameDocument(left, right) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function mergeIncomingEntity(current, incoming, details) {
+  if (!current) return clone(incoming);
+  if (current.version > incoming.version) {
+    throw new ConflictError("Local Entity is newer than the cloud Delta.", {
+      ...details,
+      localVersion: current.version,
+      cloudVersion: incoming.version,
+    });
+  }
+  if (current.version === incoming.version && !sameDocument(current, incoming)) {
+    throw new ConflictError("Local and cloud Entities have the same version but different content.", {
+      ...details,
+      version: current.version,
+    });
+  }
+  return current.version === incoming.version ? current : clone(incoming);
+}
+
+export async function applyCloudEvents(projectRoot, cloudEvents, options = {}) {
+  if (!Array.isArray(cloudEvents)) throw new ValidationError("cloudEvents must be an array.");
+  if (!cloudEvents.length) {
+    const workspace = await readWorkspace(projectRoot);
+    return { applied: 0, workspaceVersion: workspace.workspaceVersion, cloudWorkspaceVersion: Number(options.cloudWorkspaceVersion || 0) };
+  }
+  return withWorkspaceLock(projectRoot, async (paths) => {
+    const workspace = await readWorkspaceFile(paths.workspace);
+    const ordered = cloudEvents.map(cloudEventFields).sort((left, right) =>
+      left.cloudWorkspaceVersion - right.cloudWorkspaceVersion || left.cloudEventIndex - right.cloudEventIndex
+    );
+    let applied = 0;
+    for (const event of ordered) {
+      const incoming = event.payload.document;
+      const isDelete = event.type === "entity.deleted";
+      if (!event.collection || !event.entityId) throw new ValidationError("Cloud event is missing collection or entity ID.", { event });
+      if (event.collection === "projects") {
+        if (isDelete) throw new ValidationError("Cloud Project deletion must be handled explicitly.");
+        if (!incoming?.version) throw new ValidationError("Cloud Project event is missing a versioned document.");
+        const candidate = { ...clone(incoming), id: workspace.project.id, root: workspace.project.root };
+        const merged = mergeIncomingEntity(workspace.project, candidate, { collection: "projects", entityId: event.entityId });
+        if (merged !== workspace.project) { workspace.project = merged; applied += 1; }
+        continue;
+      }
+      if (event.collection === "board_elements") {
+        const boardId = String(event.payload.parentEntityId || event.payload.parent_entity_id || "");
+        const board = workspace.entities.boards[boardId];
+        if (!board) throw new ValidationError("Cloud board element references a missing board.", { boardId, entityId: event.entityId });
+        const elementId = incoming?.id || event.entityId.split("/").slice(1).join("/");
+        const current = board.elements[elementId];
+        if (isDelete) {
+          if (current && current.version !== Number(event.payload.previousVersion)) {
+            throw new ConflictError("Cloud deletion conflicts with the local board element.", { boardId, elementId, localVersion: current.version, cloudVersion: event.payload.previousVersion });
+          }
+          if (current) {
+            delete board.elements[elementId];
+            board.order = board.order.filter((id) => id !== elementId);
+            applied += 1;
+          }
+        } else {
+          if (!incoming?.version) throw new ValidationError("Cloud board element event is missing a versioned document.");
+          const merged = mergeIncomingEntity(current, incoming, { collection: "board_elements", boardId, entityId: elementId });
+          if (merged !== current) {
+            board.elements[elementId] = merged;
+            if (!board.order.includes(elementId)) board.order.push(elementId);
+            applied += 1;
+          }
+        }
+        continue;
+      }
+      if (event.collection === "boards" && !isDelete) {
+        if (!incoming?.version) throw new ValidationError("Cloud Board event is missing a versioned document.", { entityId: event.entityId });
+        const current = workspace.entities.boards[event.entityId];
+        const candidate = { ...clone(incoming), elements: clone(current?.elements || incoming.elements || {}) };
+        const merged = mergeIncomingEntity(current, candidate, { collection: "boards", entityId: event.entityId });
+        if (merged !== current) { workspace.entities.boards[event.entityId] = merged; applied += 1; }
+        continue;
+      }
+      if (!ENTITY_COLLECTIONS.includes(event.collection)) throw new ValidationError("Unsupported cloud collection.", { collection: event.collection });
+      const entities = workspace.entities[event.collection];
+      const current = entities[event.entityId];
+      if (isDelete) {
+        if (current && current.version !== Number(event.payload.previousVersion)) {
+          throw new ConflictError("Cloud deletion conflicts with the local Entity.", { collection: event.collection, entityId: event.entityId, localVersion: current.version, cloudVersion: event.payload.previousVersion });
+        }
+        if (current) { delete entities[event.entityId]; applied += 1; }
+      } else {
+        if (!incoming?.version) throw new ValidationError("Cloud Entity event is missing a versioned document.", { collection: event.collection, entityId: event.entityId });
+        const merged = mergeIncomingEntity(current, incoming, { collection: event.collection, entityId: event.entityId });
+        if (merged !== current) { entities[event.entityId] = merged; applied += 1; }
+      }
+    }
+    if (applied) {
+      const now = timestamp();
+      const workspaceVersion = workspace.workspaceVersion + 1;
+      workspace.workspaceVersion = workspaceVersion;
+      workspace.updatedAt = now;
+      workspace.eventLog.push({
+        id: randomUUID(),
+        transactionId: randomUUID(),
+        workspaceVersion,
+        index: 0,
+        type: "cloud.delta.applied",
+        entityType: "workspace",
+        entityId: workspace.project.id,
+        actor: normalizeActor(options.actor || "cloud-sync"),
+        timestamp: now,
+        payload: {
+          applied,
+          cloudWorkspaceVersion: Math.max(...ordered.map((event) => event.cloudWorkspaceVersion)),
+        },
+      });
+      validateWorkspace(workspace);
+      await atomicWriteJson(paths.workspace, workspace);
+      await atomicWriteJson(path.join(paths.snapshots, `${String(workspaceVersion).padStart(12, "0")}.json`), workspace).catch(() => {});
+    }
+    return {
+      applied,
+      workspaceVersion: workspace.workspaceVersion,
+      cloudWorkspaceVersion: Math.max(...ordered.map((event) => event.cloudWorkspaceVersion)),
+    };
+  });
+}

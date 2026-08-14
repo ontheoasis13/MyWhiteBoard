@@ -36,7 +36,7 @@ try {
   const initialized = await request("initialize", { protocolVersion: "2025-11-25", capabilities: {} });
   assert(initialized.result?.serverInfo?.name === "My Whiteboard Workspace", "initialize failed");
   const listed = await request("tools/list");
-  assert(listed.result.tools.length === 24, "unexpected workspace tool count");
+  assert(listed.result.tools.length === 28, "unexpected workspace tool count");
   assert(listed.result.tools.every((tool) => !tool._meta?.["openai/outputTemplate"]), "iframe output template remains");
   const project = await request("tools/call", { name: "project_create", arguments: { project_root: projectRoot, name: "Smoke Project", actor: { id: "codex", client: "codex" } } });
   assert(project.result.structuredContent.workspaceVersion === 1, "project creation failed");
