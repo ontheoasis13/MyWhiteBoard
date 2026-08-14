@@ -4,7 +4,9 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import {
   analyzeSemanticCodeBoard,
+  applyDomainChanges,
   applyWorkspaceTransaction,
+  connectAgent,
   createBoardEntity,
   createProjectCodeBoard,
   createProjectWorkspace,
@@ -86,6 +88,41 @@ export const workspaceTools = [
     description: "Return only the semantic elements currently selected by the user, including code, task, decision, and artifact references.",
     inputSchema: { type: "object", properties: { project_root: { type: "string" }, board_id: { type: "string" } }, required: ["project_root", "board_id"], additionalProperties: false },
     annotations: readOnly,
+  },
+  {
+    name: "context_apply",
+    title: "Apply Shared Context changes",
+    description: "Batch create, update, or delete versioned project/code context records. Updates and deletes require expected_version.",
+    inputSchema: { type: "object", properties: { project_root: { type: "string" }, changes: { type: "array", items: { type: "object" }, minItems: 1 }, actor: { type: "object" } }, required: ["project_root", "changes"], additionalProperties: false },
+    annotations: mutating,
+  },
+  {
+    name: "tasks_apply",
+    title: "Apply Task changes",
+    description: "Batch create, update, or delete versioned tasks with status, priority, dependencies, Agent assignment, and board references.",
+    inputSchema: { type: "object", properties: { project_root: { type: "string" }, changes: { type: "array", items: { type: "object" }, minItems: 1 }, actor: { type: "object" } }, required: ["project_root", "changes"], additionalProperties: false },
+    annotations: mutating,
+  },
+  {
+    name: "decisions_apply",
+    title: "Apply Decision changes",
+    description: "Batch create, update, or delete versioned decisions with rationale, status, alternatives, and board references.",
+    inputSchema: { type: "object", properties: { project_root: { type: "string" }, changes: { type: "array", items: { type: "object" }, minItems: 1 }, actor: { type: "object" } }, required: ["project_root", "changes"], additionalProperties: false },
+    annotations: mutating,
+  },
+  {
+    name: "artifacts_apply",
+    title: "Apply Artifact changes",
+    description: "Batch create, update, or delete versioned file, URI, and board artifacts.",
+    inputSchema: { type: "object", properties: { project_root: { type: "string" }, changes: { type: "array", items: { type: "object" }, minItems: 1 }, actor: { type: "object" } }, required: ["project_root", "changes"], additionalProperties: false },
+    annotations: mutating,
+  },
+  {
+    name: "agent_connect",
+    title: "Connect or refresh Agent identity",
+    description: "Upsert one Agent identity with client, status, capabilities, metadata, last-seen time, and Entity Version.",
+    inputSchema: { type: "object", properties: { project_root: { type: "string" }, agent: { type: "object" }, actor: { type: "object" } }, required: ["project_root", "agent"], additionalProperties: false },
+    annotations: mutating,
   },
   {
     name: "legacy_discover",
@@ -181,6 +218,16 @@ export async function callWorkspaceTool(name, args, httpService) {
     const selection = workspace.entities.selections[args.board_id] || { id: args.board_id, boardId: args.board_id, elementIds: [], version: 0 };
     const elements = selection.elementIds.map((id) => board.elements[id]).filter(Boolean);
     return content(`${elements.length} selected semantic element(s).`, { selection, elements, workspaceVersion: workspace.workspaceVersion });
+  }
+  const domainCollections = { context_apply: "contexts", tasks_apply: "tasks", decisions_apply: "decisions", artifacts_apply: "artifacts" };
+  if (domainCollections[name]) {
+    const result = await applyDomainChanges(args.project_root, domainCollections[name], args.changes, args.actor);
+    return content(`Applied ${args.changes.length} ${domainCollections[name]} change(s).`, { collection: domainCollections[name], entities: result.entities, workspaceVersion: result.workspaceVersion, events: result.events });
+  }
+  if (name === "agent_connect") {
+    await createProjectWorkspace(args.project_root, { actor: args.actor || args.agent });
+    const result = await connectAgent(args.project_root, args.agent, args.actor || args.agent);
+    return content(`Agent “${result.agent.displayName}” connected from ${result.agent.client}.`, { agent: result.agent, workspaceVersion: result.workspaceVersion, events: result.events });
   }
   if (name === "legacy_discover") {
     const files = await discoverLegacyBoards(args.project_root);

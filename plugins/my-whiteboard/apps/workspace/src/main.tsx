@@ -3,6 +3,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import "@excalidraw/excalidraw/index.css";
 import "./styles.css";
+import "./domain.css";
 import { App } from "./App";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(

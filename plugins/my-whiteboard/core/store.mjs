@@ -10,6 +10,7 @@ import {
   normalizeBoardElement,
   normalizeEntity,
   timestamp,
+  validateDomainEntity,
   validateWorkspace,
 } from "./schema.mjs";
 
@@ -174,6 +175,7 @@ function applyEntityOperation(workspace, operation, context) {
   if (operation.type === "entity.create") {
     const entity = normalizeEntity(collection, operation.entity, context.now);
     if (entities[entity.id]) throw new ConflictError("Entity ID already exists.", { collection, entityId: entity.id });
+    validateDomainEntity(collection, entity, workspace);
     entities[entity.id] = entity;
     return eventFor({ ...context, type: `${entity.entityType}.created`, collection, entityId: entity.id, payload: { entity } });
   }
@@ -188,6 +190,7 @@ function applyEntityOperation(workspace, operation, context) {
     next.createdAt = current.createdAt;
     next.version = current.version + 1;
     next.updatedAt = context.now;
+    validateDomainEntity(collection, next, workspace);
     entities[id] = next;
     return eventFor({ ...context, type: `${current.entityType}.updated`, collection, entityId: id, payload: { patch: clone(operation.patch || {}), version: next.version } });
   }

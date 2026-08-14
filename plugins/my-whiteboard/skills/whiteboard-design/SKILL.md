@@ -18,6 +18,13 @@ Build editable semantic structure, not a flattened picture. `Semantic Board Stat
 7. Call `board_export` only when requested. JSON is the editable semantic source; SVG and PNG are delivery formats.
 8. For incremental Agent context, call `workspace_get_changes` with the last seen Workspace Version.
 
+## Single-Agent Workspace
+
+- Call `agent_connect` at the start of substantive work so the workspace records the client, capabilities, status, and last-seen time.
+- Use `context_apply`, `tasks_apply`, `decisions_apply`, and `artifacts_apply` for their matching collections. Batch related changes and include `expected_version` on every update or delete.
+- Record durable goals, constraints, and code findings as Context; actionable work as Tasks; architectural choices and rationale as Decisions; and files, URIs, exports, or boards as Artifacts.
+- Assign a Task only to an Agent already present in the workspace. Create dependency Tasks before referring to them with `dependsOn`.
+
 ## Code workspace workflow
 
 - Use `code_board_create` with the repository root to scan bounded source files and imports into a semantic architecture board.
@@ -48,4 +55,4 @@ Build editable semantic structure, not a flattened picture. `Semantic Board Stat
 
 ## Privacy and portability
 
-The local workspace and loopback URL stay on the user's machine. The URL works only while this MCP server process is running and includes a short-lived secret token. Never expose a Supabase secret/service-role key in a board, log, tool result, repository, or browser client. Cloud sync, tasks, decisions, artifacts, handoffs, and messages are enabled only when their corresponding workspace tools are present; do not pretend an unavailable milestone is complete.
+The local workspace and loopback URL stay on the user's machine. The URL works only while this MCP server process is running and includes a short-lived secret token. Never expose a Supabase secret/service-role key in a board, log, tool result, repository, or browser client. Cloud sync, handoffs, and messages are enabled only when their corresponding workspace tools are present; do not pretend an unavailable milestone is complete.

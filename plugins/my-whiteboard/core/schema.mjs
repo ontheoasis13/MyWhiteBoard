@@ -16,6 +16,18 @@ export const ENTITY_COLLECTIONS = Object.freeze([
 ]);
 
 export const BOARD_KINDS = new Set(["node", "edge", "text", "note", "group", "section"]);
+export const TASK_STATUSES = new Set(["todo", "in_progress", "blocked", "done", "cancelled"]);
+export const DECISION_STATUSES = new Set(["proposed", "accepted", "rejected", "superseded"]);
+export const AGENT_STATUSES = new Set(["connected", "idle", "working", "offline", "error"]);
+
+const ENTITY_DEFAULTS = Object.freeze({
+  contexts: { kind: "project", title: "Context", content: "", sources: [], tags: [] },
+  tasks: { status: "todo", priority: "medium", description: "", dependsOn: [], assigneeAgentId: null, boardElementIds: [] },
+  decisions: { status: "proposed", rationale: "", alternatives: [], boardElementIds: [] },
+  artifacts: { kind: "file", status: "current", path: null, uri: null, boardId: null, metadata: {} },
+  agents: { status: "connected", capabilities: [], metadata: {} },
+  selections: { elementIds: [] },
+});
 
 export function timestamp() {
   return new Date().toISOString();
@@ -88,7 +100,8 @@ export function normalizeEntity(collection, input, now = timestamp()) {
   if (!ENTITY_COLLECTIONS.includes(collection)) throw new ValidationError(`Unknown entity collection: ${collection}`);
   if (!input || typeof input !== "object" || Array.isArray(input)) throw new ValidationError("Entity must be an object.");
   const id = String(input.id || `${collection.slice(0, -1)}-${randomUUID().slice(0, 8)}`);
-  return {
+  const entity = {
+    ...clone(ENTITY_DEFAULTS[collection] || {}),
     ...clone(input),
     id,
     entityType: String(input.entityType || collection.slice(0, -1)),
@@ -96,6 +109,11 @@ export function normalizeEntity(collection, input, now = timestamp()) {
     createdAt: input.createdAt || now,
     updatedAt: now,
   };
+  if (collection === "agents") {
+    entity.displayName ||= id;
+    entity.client ||= "unknown";
+  }
+  return entity;
 }
 
 export function normalizeBoardElement(input, now = timestamp()) {
@@ -134,6 +152,60 @@ export function createBoardEntity({ id, title, boardType = "diagram", descriptio
   };
 }
 
+function requireText(entity, field, collection) {
+  if (!String(entity[field] || "").trim()) throw new ValidationError(`${collection}.${field} is required.`, { collection, entityId: entity.id, field });
+}
+
+function requireStringArray(entity, field, collection) {
+  if (!Array.isArray(entity[field]) || entity[field].some((value) => typeof value !== "string")) {
+    throw new ValidationError(`${collection}.${field} must be an array of strings.`, { collection, entityId: entity.id, field });
+  }
+}
+
+export function validateDomainEntity(collection, entity, workspace) {
+  if (!entity?.id || !Number.isInteger(entity.version) || entity.version < 1) throw new ValidationError("Entity identity or version is invalid.", { collection, entityId: entity?.id });
+  if (collection === "boards") {
+    requireText(entity, "title", collection);
+    if (!entity.elements || typeof entity.elements !== "object" || !Array.isArray(entity.order)) throw new ValidationError("Board elements and order are required.", { entityId: entity.id });
+  }
+  if (collection === "contexts") {
+    requireText(entity, "title", collection);
+    requireText(entity, "content", collection);
+    requireStringArray(entity, "sources", collection);
+  }
+  if (collection === "tasks") {
+    requireText(entity, "title", collection);
+    if (!TASK_STATUSES.has(entity.status)) throw new ValidationError(`Invalid task status: ${entity.status}`, { entityId: entity.id });
+    requireStringArray(entity, "dependsOn", collection);
+    if (entity.dependsOn.includes(entity.id)) throw new ValidationError("A task cannot depend on itself.", { entityId: entity.id });
+    for (const dependencyId of entity.dependsOn) {
+      if (workspace && !workspace.entities.tasks[dependencyId]) throw new ValidationError("Task dependency does not exist.", { entityId: entity.id, dependencyId });
+    }
+    if (entity.assigneeAgentId && workspace && !workspace.entities.agents[entity.assigneeAgentId]) throw new ValidationError("Assigned Agent does not exist.", { entityId: entity.id, assigneeAgentId: entity.assigneeAgentId });
+  }
+  if (collection === "decisions") {
+    requireText(entity, "title", collection);
+    requireText(entity, "rationale", collection);
+    if (!DECISION_STATUSES.has(entity.status)) throw new ValidationError(`Invalid decision status: ${entity.status}`, { entityId: entity.id });
+  }
+  if (collection === "artifacts") {
+    requireText(entity, "title", collection);
+    requireText(entity, "kind", collection);
+    if (!entity.path && !entity.uri && !entity.boardId) throw new ValidationError("Artifact requires path, uri, or boardId.", { entityId: entity.id });
+  }
+  if (collection === "agents") {
+    requireText(entity, "displayName", collection);
+    requireText(entity, "client", collection);
+    if (!AGENT_STATUSES.has(entity.status)) throw new ValidationError(`Invalid Agent status: ${entity.status}`, { entityId: entity.id });
+    requireStringArray(entity, "capabilities", collection);
+  }
+  if (collection === "selections") {
+    requireText(entity, "boardId", collection);
+    requireStringArray(entity, "elementIds", collection);
+  }
+  return entity;
+}
+
 export function validateWorkspace(workspace) {
   if (!workspace || typeof workspace !== "object") throw new ValidationError("Workspace document must be an object.");
   if (workspace.schemaVersion !== WORKSPACE_SCHEMA_VERSION) throw new ValidationError(`Unsupported workspace schema: ${workspace.schemaVersion}`);
@@ -142,6 +214,7 @@ export function validateWorkspace(workspace) {
   if (!workspace.entities || typeof workspace.entities !== "object") throw new ValidationError("Workspace entities are missing.");
   for (const collection of ENTITY_COLLECTIONS) {
     if (!workspace.entities[collection] || typeof workspace.entities[collection] !== "object") throw new ValidationError(`Entity collection is missing: ${collection}`);
+    for (const entity of Object.values(workspace.entities[collection])) validateDomainEntity(collection, entity, workspace);
   }
   if (!Array.isArray(workspace.eventLog)) throw new ValidationError("eventLog must be an array.");
   if (!workspace.imports || typeof workspace.imports !== "object") throw new ValidationError("imports must be an object.");

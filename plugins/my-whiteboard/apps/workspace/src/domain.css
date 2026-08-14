@@ -1,0 +1,11 @@
+.domain-heading { margin-top: 20px !important; }
+.domain-list { display: grid; gap: 7px; margin: 10px 0; }
+.domain-list article { display: flex; flex-direction: column; gap: 3px; padding: 9px; border: 1px solid #e4e8ef; border-radius: 9px; background: #fff; }
+.domain-list article > span { text-transform: uppercase; letter-spacing: .08em; color: #6d5ef7; font-size: 8px; font-weight: 800; }
+.domain-list article strong { font-size: 11px; color: #354052; }
+.domain-list article p { margin: 0; color: #7b8798; font-size: 10px; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.domain-list.compact { margin-top: 6px; }
+.task-strip b { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; background: #aab4c4; }
+.task-strip b[data-status="done"] { background: #2fb477; }
+.task-strip b[data-status="in_progress"] { background: #6d5ef7; }
+.task-strip b[data-status="blocked"] { background: #e65b5b; }

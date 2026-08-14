@@ -30,8 +30,10 @@ type Workspace = {
   entities: {
     boards: Record<string, Board>;
     agents: Record<string, { id: string; displayName?: string; status?: string }>;
-    tasks: Record<string, { id: string; title: string; status?: string }>;
-    contexts: Record<string, unknown>;
+    tasks: Record<string, { id: string; title: string; status?: string; priority?: string; assigneeAgentId?: string | null }>;
+    contexts: Record<string, { id: string; title: string; content: string; kind?: string }>;
+    decisions: Record<string, { id: string; title: string; rationale: string; status?: string }>;
+    artifacts: Record<string, { id: string; title: string; kind: string; path?: string | null; uri?: string | null }>;
   };
 };
 
@@ -191,6 +193,9 @@ export function App() {
 
   const agents = Object.values(workspace.entities.agents || {});
   const tasks = Object.values(workspace.entities.tasks || {});
+  const contexts = Object.values(workspace.entities.contexts || {});
+  const decisions = Object.values(workspace.entities.decisions || {});
+  const artifacts = Object.values(workspace.entities.artifacts || {});
 
   return (
     <main className="workspace-shell">
@@ -209,11 +214,16 @@ export function App() {
         <div className="section-label">Project Context</div>
         <h2>{board?.title || "Workspace"}</h2>
         <p>{workspace.project.overview || "Project Overview 尚未填写。"}</p>
+        <div className="domain-list">{contexts.slice(0, 3).map((context) => <article key={context.id}><span>{context.kind || "context"}</span><strong>{context.title}</strong><p>{context.content}</p></article>)}</div>
         <dl><div><dt>Workspace Version</dt><dd>{workspace.workspaceVersion}</dd></div><div><dt>Board Version</dt><dd>{board?.version || "—"}</dd></div><div><dt>Authority</dt><dd>Semantic State</dd></div></dl>
+        <div className="section-label domain-heading">Decisions</div>
+        <div className="domain-list compact">{decisions.slice(0, 3).map((decision) => <article key={decision.id}><span>{decision.status || "proposed"}</span><strong>{decision.title}</strong><p>{decision.rationale}</p></article>)}{!decisions.length && <p className="empty-copy">No decisions yet.</p>}</div>
+        <div className="section-label domain-heading">Artifacts</div>
+        <div className="domain-list compact">{artifacts.slice(0, 3).map((artifact) => <article key={artifact.id}><span>{artifact.kind}</span><strong>{artifact.title}</strong><p>{artifact.path || artifact.uri || "Board artifact"}</p></article>)}{!artifacts.length && <p className="empty-copy">No artifacts yet.</p>}</div>
         {ignored.length > 0 && <div className="warning"><strong>暂未持久化</strong><p>{ignored.length} 个 Excalidraw 元素尚无 Semantic 类型，仍只存在于当前会话。</p></div>}
         {error && <div className="error"><strong>需要处理</strong><p>{error}</p></div>}
       </aside>
-      <footer className="task-panel"><div><span className="section-label">Tasks</span><strong>{tasks.length} 项</strong></div><div className="task-strip">{tasks.length ? tasks.slice(0, 5).map((task) => <span key={task.id}>{task.title} · {task.status || "todo"}</span>) : <span>Single-Agent Board Integration 阶段：Tasks 将在下一个里程碑启用。</span>}</div></footer>
+      <footer className="task-panel"><div><span className="section-label">Tasks</span><strong>{tasks.length} 项</strong></div><div className="task-strip">{tasks.length ? tasks.slice(0, 5).map((task) => <span key={task.id}><b data-status={task.status || "todo"} />{task.title} · {task.status || "todo"}{task.assigneeAgentId ? ` · ${task.assigneeAgentId}` : ""}</span>) : <span>Agent 尚未创建任务。</span>}</div></footer>
     </main>
   );
 }
