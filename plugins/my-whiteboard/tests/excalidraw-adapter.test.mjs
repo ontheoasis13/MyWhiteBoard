@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { excalidrawSceneToSemanticChanges, semanticBoardToExcalidrawSkeletons } from "../adapters/excalidraw-adapter.mjs";
+import { excalidrawSceneToSemanticChanges, excalidrawSceneToSemanticChangesSince, semanticBoardToExcalidrawSkeletons } from "../adapters/excalidraw-adapter.mjs";
 
 function board() {
   return {
@@ -51,4 +51,27 @@ test("unsupported Excalidraw features remain session-only", () => {
   const result = excalidrawSceneToSemanticChanges({ ...board(), elements: {}, order: [] }, [{ id: "free", type: "freedraw", isDeleted: false }]);
   assert.equal(result.changes.length, 0);
   assert.equal(result.ignored[0].reason, "unsupported-semantic-kind");
+});
+
+test("filters hydration normalization and persists only intentional semantic changes", () => {
+  const current = board();
+  const hydrated = [
+    { id: "api", type: "rectangle", x: 80, y: 80, width: 220, height: 118, angle: 0, locked: false, strokeColor: "#475569", backgroundColor: "#ffffff", fillStyle: "solid", strokeWidth: 2, strokeStyle: "solid", roughness: 1, opacity: 100, groupIds: [], customData: { myWhiteboard: { elementId: "api" } } },
+    { id: "api-label", type: "text", containerId: "api", text: "A\nPI", originalText: "API" },
+    { id: "db", type: "ellipse", x: 420, y: 80, width: 220, height: 110, angle: 0, locked: false, strokeColor: "#475569", backgroundColor: "#ffffff", fillStyle: "solid", strokeWidth: 2, strokeStyle: "solid", roughness: 1, opacity: 100, groupIds: [], customData: { myWhiteboard: { elementId: "db" } } },
+    { id: "db-label", type: "text", containerId: "db", text: "Data\nbase", originalText: "Database" },
+    { id: "api-db", type: "arrow", x: 300, y: 130, width: 120, height: 1, angle: 0, locked: false, points: [[0, 0], [120, 0]], startBinding: { elementId: "api" }, endBinding: { elementId: "db" }, strokeColor: "#475569", backgroundColor: "#ffffff", fillStyle: "solid", strokeWidth: 2, strokeStyle: "solid", roughness: 1, opacity: 100, groupIds: [], customData: { myWhiteboard: { elementId: "api-db" } } },
+  ];
+  const unchanged = excalidrawSceneToSemanticChangesSince(current, hydrated, structuredClone(hydrated));
+  assert.deepEqual(unchanged.changedIds, []);
+  assert.deepEqual(unchanged.changes, []);
+
+  const moved = structuredClone(hydrated);
+  moved[0].x = 112;
+  const changed = excalidrawSceneToSemanticChangesSince(current, hydrated, moved);
+  assert.deepEqual(changed.changedIds, ["api"]);
+  assert.equal(changed.changes.length, 1);
+  assert.equal(changed.changes[0].id, "api");
+  assert.equal(changed.changes[0].patch.layout.x, 112);
+  assert.equal(changed.changes[0].patch.label, "API");
 });

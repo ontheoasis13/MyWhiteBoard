@@ -9,3 +9,5 @@ preview*.out
 preview*.err
 *.whiteboard.json
 *.export.json
+.my-whiteboard/lock
+.my-whiteboard/snapshots/

@@ -132,8 +132,9 @@ function equal(a, b) {
 }
 
 function labelFor(element, labels, existing) {
-  if (element.type === "text" && !element.containerId) return String(element.text || "");
-  return String(labels.get(element.id)?.text ?? existing?.label ?? "");
+  if (element.type === "text" && !element.containerId) return String(element.originalText ?? element.text ?? "");
+  const label = labels.get(element.id);
+  return String(label?.originalText ?? label?.text ?? existing?.label ?? "");
 }
 
 function semanticIdFor(element) {
@@ -219,4 +220,64 @@ export function excalidrawSceneToSemanticChanges(board, sceneElements) {
     }
   }
   return { changes, ignored };
+}
+
+function sceneSemanticId(element) {
+  if (element?.type === "text" && element.containerId) return String(element.containerId);
+  return semanticIdFor(element);
+}
+
+function sceneElementSignature(element) {
+  return JSON.stringify({
+    id: String(element?.id || ""),
+    type: element?.type,
+    x: numeric(element?.x, 0),
+    y: numeric(element?.y, 0),
+    width: Math.max(1, numeric(element?.width, 1)),
+    height: Math.max(1, numeric(element?.height, 1)),
+    angle: numeric(element?.angle, 0),
+    locked: Boolean(element?.locked),
+    isDeleted: Boolean(element?.isDeleted),
+    text: element?.originalText ?? element?.text ?? null,
+    containerId: element?.containerId || null,
+    points: Array.isArray(element?.points) ? element.points : null,
+    startBinding: element?.startBinding?.elementId || null,
+    endBinding: element?.endBinding?.elementId || null,
+    strokeColor: element?.strokeColor,
+    backgroundColor: element?.backgroundColor,
+    fillStyle: element?.fillStyle,
+    strokeWidth: element?.strokeWidth,
+    strokeStyle: element?.strokeStyle,
+    roughness: element?.roughness,
+    opacity: element?.opacity,
+    groupIds: Array.isArray(element?.groupIds) ? element.groupIds : [],
+    children: Array.isArray(element?.children) ? element.children : [],
+  });
+}
+
+function semanticSceneSignatures(sceneElements) {
+  const signatures = new Map();
+  for (const element of Array.from(sceneElements || [])) {
+    const id = sceneSemanticId(element);
+    const values = signatures.get(id) || [];
+    values.push(sceneElementSignature(element));
+    signatures.set(id, values);
+  }
+  for (const values of signatures.values()) values.sort();
+  return signatures;
+}
+
+export function excalidrawSceneToSemanticChangesSince(board, baselineScene, sceneElements) {
+  const before = semanticSceneSignatures(baselineScene);
+  const after = semanticSceneSignatures(sceneElements);
+  const changedIds = new Set();
+  for (const id of new Set([...before.keys(), ...after.keys()])) {
+    if (!equal(before.get(id) || [], after.get(id) || [])) changedIds.add(id);
+  }
+  const diff = excalidrawSceneToSemanticChanges(board, sceneElements);
+  return {
+    ...diff,
+    changedIds: [...changedIds],
+    changes: diff.changes.filter((change) => changedIds.has(String(change.id || change.element?.id || ""))),
+  };
 }

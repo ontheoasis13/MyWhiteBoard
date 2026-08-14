@@ -23,7 +23,7 @@ import {
 } from "../core/index.mjs";
 import { exportSemanticBoard } from "../export/semantic-export.mjs";
 import { SupabaseWorkspaceAdapter } from "../adapters/supabase-adapter.mjs";
-import { createWorkspaceHttpService } from "./workspace-http.mjs";
+import { launchStandaloneWorkspace } from "./workspace-launcher.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const VERSION = JSON.parse(await readFile(path.join(ROOT, ".codex-plugin", "plugin.json"), "utf8")).version;
@@ -32,11 +32,39 @@ const readOnly = { readOnlyHint: true, destructiveHint: false, idempotentHint: t
 const mutating = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false };
 const actorSchema = { type: "object", properties: { id: { type: "string" }, displayName: { type: "string" }, client: { type: "string" } }, required: ["id"], additionalProperties: true };
 const agentSchema = { type: "object", properties: { id: { type: "string" }, displayName: { type: "string" }, client: { type: "string" }, status: { type: "string", enum: ["connected", "idle", "working", "offline", "error"] }, capabilities: { type: "array", items: { type: "string" } }, metadata: { type: "object" } }, required: ["id", "displayName", "client"], additionalProperties: false };
+const taskStatusSchema = { type: "string", enum: ["todo", "in_progress", "blocked", "done", "cancelled"] };
 const domainChangeSchema = {
   oneOf: [
     { type: "object", properties: { op: { const: "create" }, entity: { type: "object" } }, required: ["op", "entity"], additionalProperties: false },
     { type: "object", properties: { op: { const: "update" }, id: { type: "string" }, expected_version: { type: "integer", minimum: 1 }, patch: { type: "object" } }, required: ["op", "id", "expected_version", "patch"], additionalProperties: false },
     { type: "object", properties: { op: { const: "delete" }, id: { type: "string" }, expected_version: { type: "integer", minimum: 1 } }, required: ["op", "id", "expected_version"], additionalProperties: false },
+  ],
+};
+const taskEntitySchema = { type: "object", properties: { status: taskStatusSchema }, additionalProperties: true };
+const taskChangeSchema = {
+  oneOf: [
+    { type: "object", properties: { op: { const: "create" }, entity: taskEntitySchema }, required: ["op", "entity"], additionalProperties: false },
+    { type: "object", properties: { op: { const: "update" }, id: { type: "string" }, expected_version: { type: "integer", minimum: 1 }, patch: taskEntitySchema }, required: ["op", "id", "expected_version", "patch"], additionalProperties: false },
+    { type: "object", properties: { op: { const: "delete" }, id: { type: "string" }, expected_version: { type: "integer", minimum: 1 } }, required: ["op", "id", "expected_version"], additionalProperties: false },
+  ],
+};
+const boardElementSchema = {
+  type: "object",
+  properties: {
+    id: { type: "string" },
+    kind: { type: "string", enum: ["node", "edge", "text", "note", "group", "section"] },
+    semanticType: { type: "string" },
+    label: { type: "string" },
+    properties: { type: "object" },
+    layout: { type: "object" },
+  },
+  additionalProperties: true,
+};
+const boardChangeSchema = {
+  oneOf: [
+    { type: "object", properties: { op: { const: "create" }, element: boardElementSchema }, required: ["op", "element"], additionalProperties: false },
+    { type: "object", properties: { op: { const: "update" }, id: { type: "string" }, expectedVersion: { type: "integer", minimum: 1 }, patch: { type: "object" } }, required: ["op", "id", "expectedVersion", "patch"], additionalProperties: false },
+    { type: "object", properties: { op: { const: "delete" }, id: { type: "string" }, expectedVersion: { type: "integer", minimum: 1 } }, required: ["op", "id", "expectedVersion"], additionalProperties: false },
   ],
 };
 const handoffSchema = { type: "object", properties: { id: { type: "string" }, title: { type: "string" }, summary: { type: "string" }, fromAgentId: { type: "string" }, toAgentId: { type: "string" }, status: { type: "string", enum: ["open", "accepted", "completed", "cancelled"] }, taskIds: { type: "array", items: { type: "string" } }, artifactIds: { type: "array", items: { type: "string" } }, boardIds: { type: "array", items: { type: "string" } }, metadata: { type: "object" } }, required: ["title", "summary", "fromAgentId", "toAgentId"], additionalProperties: false };
@@ -88,8 +116,8 @@ export const workspaceTools = [
   {
     name: "board_apply",
     title: "Apply a Semantic Board transaction",
-    description: "Batch create, update, or delete semantic elements. Updates and deletes require expectedVersion and return a conflict instead of silently overwriting stale state.",
-    inputSchema: { type: "object", properties: { project_root: { type: "string" }, board_id: { type: "string" }, changes: { type: "array", items: { type: "object" }, minItems: 1 }, actor: { type: "object" } }, required: ["project_root", "board_id", "changes"], additionalProperties: false },
+    description: "Batch create, update, or delete semantic elements. Create uses { op: 'create', element: { ... } }. Update and delete use camelCase expectedVersion and return a conflict instead of silently overwriting stale state.",
+    inputSchema: { type: "object", properties: { project_root: { type: "string" }, board_id: { type: "string" }, changes: { type: "array", items: boardChangeSchema, minItems: 1 }, actor: { type: "object" } }, required: ["project_root", "board_id", "changes"], additionalProperties: false },
     annotations: mutating,
   },
   {
@@ -116,8 +144,8 @@ export const workspaceTools = [
   {
     name: "tasks_apply",
     title: "Apply Task changes",
-    description: "Batch create, update, or delete versioned tasks with status, priority, dependencies, Agent assignment, and board references.",
-    inputSchema: { type: "object", properties: { project_root: { type: "string" }, changes: { type: "array", items: domainChangeSchema, minItems: 1 }, actor: actorSchema }, required: ["project_root", "changes"], additionalProperties: false },
+    description: "Batch create, update, or delete versioned tasks with status, priority, dependencies, Agent assignment, and board references. Valid statuses are todo, in_progress, blocked, done, and cancelled; completed is a Handoff status, not a Task status.",
+    inputSchema: { type: "object", properties: { project_root: { type: "string" }, changes: { type: "array", items: taskChangeSchema, minItems: 1 }, actor: actorSchema }, required: ["project_root", "changes"], additionalProperties: false },
     annotations: mutating,
   },
   {
@@ -242,7 +270,10 @@ export const workspaceTools = [
 ];
 
 function content(message, data) {
-  return { content: [{ type: "text", text: message }], structuredContent: data };
+  const fallback = data === undefined
+    ? message
+    : `${message}\n\nStructured result (JSON):\n${JSON.stringify(data, null, 2)}`;
+  return { content: [{ type: "text", text: fallback }], structuredContent: data };
 }
 
 function requireBoard(workspace, boardId) {
@@ -289,7 +320,9 @@ export async function callWorkspaceTool(name, args, httpService) {
     return content(`Applied ${args.changes.length} semantic board change(s).`, { boardId: board.id, boardVersion: board.version, workspaceVersion: result.workspaceVersion, elementVersions: Object.fromEntries(Object.values(board.elements).map((element) => [element.id, element.version])), events: result.events });
   }
   if (name === "workspace_open") {
-    const opened = await httpService.openWorkspace({ projectRoot: args.project_root, boardId: args.board_id, name: args.name, actor: args.actor });
+    const opened = httpService?.openWorkspace
+      ? await httpService.openWorkspace({ projectRoot: args.project_root, boardId: args.board_id, name: args.name, actor: args.actor })
+      : await launchStandaloneWorkspace({ projectRoot: args.project_root, boardId: args.board_id, name: args.name, actor: args.actor });
     return content(`Open My Whiteboard directly: ${opened.url}`, { ...opened, embedded: false, authority: "semantic-board-state" });
   }
   if (name === "selection_get") {
@@ -379,7 +412,7 @@ export async function callWorkspaceTool(name, args, httpService) {
 export function runMcpServer(options = {}) {
   const input = options.input || process.stdin;
   const output = options.output || process.stdout;
-  const httpService = options.httpService || createWorkspaceHttpService();
+  const httpService = options.httpService || { openWorkspace: launchStandaloneWorkspace, stop: async () => {} };
   function send(value) { output.write(`${JSON.stringify(value)}\n`); }
   function success(id, result) { send({ jsonrpc: "2.0", id, result }); }
   function failure(id, error) { send({ jsonrpc: "2.0", id, error: { code: -32000, message: error instanceof Error ? error.message : String(error), data: { code: error?.code || "INTERNAL_ERROR", details: error?.details || {} } } }); }

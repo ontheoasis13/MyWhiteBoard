@@ -9,7 +9,10 @@ const projectRoot = await mkdtemp(path.join(os.tmpdir(), "my-whiteboard-workspac
 await writeFile(path.join(projectRoot, "index.js"), "import { answer } from './value.js';\nconsole.log(answer);\n", "utf8");
 await writeFile(path.join(projectRoot, "value.js"), "export const answer = 42;\n", "utf8");
 
-const child = spawn(process.execPath, [fileURLToPath(new URL("./server.mjs", import.meta.url))], { stdio: ["pipe", "pipe", "inherit"] });
+const child = spawn(process.execPath, [fileURLToPath(new URL("./server.mjs", import.meta.url))], {
+  stdio: ["pipe", "pipe", "inherit"],
+  env: { ...process.env, MY_WHITEBOARD_WORKSPACE_IDLE_MS: "5000" },
+});
 const lines = readline.createInterface({ input: child.stdout, crlfDelay: Infinity });
 const pending = new Map();
 let sequence = 0;
@@ -30,6 +33,14 @@ function request(method, params = {}) {
 
 function assert(value, message) {
   if (!value) throw new Error(message);
+}
+
+function parseTextFallback(result) {
+  const marker = "\n\nStructured result (JSON):\n";
+  const text = result.content?.find((item) => item.type === "text")?.text || "";
+  const markerIndex = text.indexOf(marker);
+  assert(markerIndex >= 0, "MCP text fallback is missing");
+  return JSON.parse(text.slice(markerIndex + marker.length));
 }
 
 try {
@@ -75,6 +86,8 @@ const synchronized = await request("tools/call", {
   },
 });
   assert(synchronized.result.structuredContent.events.some((event) => event.type === "message.created"), "Agent Delta sync failed");
+  const synchronizedText = parseTextFallback(synchronized.result);
+  assert(synchronizedText.agent.version === synchronized.result.structuredContent.agent.version, "text-only Agent result is incomplete");
   const applied = await request("tools/call", { name: "board_apply", arguments: { project_root: projectRoot, board_id: "architecture", changes: [{ op: "update", id: "api", expectedVersion: 1, patch: { label: "Gateway" } }] } });
   assert(applied.result.structuredContent.elementVersions.api === 2, "entity version update failed");
   const stale = await request("tools/call", { name: "board_apply", arguments: { project_root: projectRoot, board_id: "architecture", changes: [{ op: "update", id: "api", expectedVersion: 1, patch: { label: "Stale" } }] } });
@@ -83,12 +96,14 @@ const synchronized = await request("tools/call", {
   assert(codeBoard.result.structuredContent.scannedFiles.length === 2, "code scan failed");
   const delta = await request("tools/call", { name: "workspace_get_changes", arguments: { project_root: projectRoot, since_version: 1 } });
   assert(delta.result.structuredContent.events.length >= 3, "workspace delta failed");
+  const deltaText = parseTextFallback(delta.result);
+  assert(deltaText.events.length === delta.result.structuredContent.events.length, "text-only Delta result is incomplete");
   const exported = await request("tools/call", { name: "board_export", arguments: { project_root: projectRoot, board_id: "architecture", format: "svg" } });
   assert(exported.result.structuredContent.path.endsWith(".svg"), "semantic export failed");
   const opened = await request("tools/call", { name: "workspace_open", arguments: { project_root: projectRoot, board_id: "architecture" } });
   assert(opened.result.structuredContent.embedded === false, "workspace attempted iframe embedding");
   const response = await fetch(opened.result.structuredContent.url);
-  assert(response.ok && (await response.text()).includes("My Whiteboard Workspace"), "standalone workspace failed");
+  assert(response.ok && (await response.text()).includes("My Whiteboard 工作区"), "standalone workspace failed");
   process.stdout.write(`${JSON.stringify({ ok: true, project_root: projectRoot, board_id: "architecture", url: opened.result.structuredContent.url, tools: listed.result.tools.length }, null, 2)}\n`);
 } finally {
   child.kill();
