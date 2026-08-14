@@ -1,7 +1,7 @@
 {
   "name": "my-whiteboard",
-  "version": "0.1.0+codex.20260813084845",
-  "description": "A portable collaborative whiteboard for Codex with professional editing, inline UI, Supabase sync, version history, sharing, and export.",
+  "version": "0.2.0-alpha.1",
+  "description": "An Agent-neutral, local-first shared visual workspace with semantic boards, project state, tasks, context, history, and optional cloud collaboration.",
   "author": {
     "name": "NCKZ"
   },
@@ -19,13 +19,14 @@
   "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "My Whiteboard",
-    "shortDescription": "Collaborative editable whiteboards for Codex",
-    "longDescription": "Create, inspect, edit, arrange, sync, share, and export structured whiteboards. Use professional multi-select editing, inline/fullscreen plugin UI, local version history, and optional Supabase authentication and Realtime collaboration across devices.",
+    "shortDescription": "Shared visual workspace for people and AI Agents",
+    "longDescription": "Create persistent Agent-neutral projects with semantic whiteboards, shared context, tasks, decisions, artifacts, history, handoffs, and optional Supabase collaboration. Codex connects through the plugin while other MCP clients use the same Core.",
     "developerName": "NCKZ",
     "category": "Productivity",
     "capabilities": [
       "Interactive",
       "Write",
+      "Agent-neutral",
       "Cross-platform",
       "Local-first",
       "Cloud sync",
@@ -33,9 +34,9 @@
       "Version history"
     ],
     "defaultPrompt": [
-      "Sketch a UI wireframe on my whiteboard.",
-      "Create a flowchart and arrange it clearly.",
-      "Open my latest whiteboard and refine it."
+      "Create a project workspace and map its architecture.",
+      "Open the current semantic board and refine it.",
+      "Show tasks, decisions, and changes since my last read."
     ],
     "brandColor": "#6D5EF7"
   }
