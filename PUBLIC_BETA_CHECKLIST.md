@@ -8,7 +8,8 @@
 - [x] Supabase `002`—`004` 迁移和回滚事务测试
 - [x] Secret Key 精确扫描无命中
 - [x] 真实 Codex CLI 交接创建测试
-- [ ] 重启 WorkBuddy 5.3.5 并完成真实接收/回信测试
+- [x] WorkBuddy 5.3.5 完成真实客户端核心接收/回信测试（Workspace v9、Handoff v2）
+- [ ] 在 WorkBuddy 连接器管理中信任 `my-whiteboard`，完成真实 MCP Transport 工具直调
 - [ ] 安装 `gh` 并认证
 - [ ] 推送 `agent/workspace-v0.2`、baseline tag 和 release tag
 - [ ] 创建 Draft PR，审阅后合并到 `main`

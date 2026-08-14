@@ -35,6 +35,8 @@ codex plugin add my-whiteboard@my-whiteboard
 使用 $whiteboard-design，在当前项目创建一张登录流程图并打开白板。
 ```
 
+如果曾安装 `my-whiteboard@personal` 0.1，请先运行 `codex plugin remove my-whiteboard@personal`，避免 Codex 同时加载旧 Skill 和 0.2 插件。卸载命令需要在不占用旧插件的新线程或关闭 Codex 后执行。
+
 ## MCP 客户端
 
 Codex 插件会自动注册 MCP Server。WorkBuddy 等客户端可把下列配置合并到自己的 MCP 配置中，并把路径改成实际安装位置。WorkBuddy 5.3.5 在 Windows 上读取 `%USERPROFILE%\.workbuddy\.mcp.json`：
@@ -84,7 +86,7 @@ MY_WHITEBOARD_SUPABASE_ACCESS_TOKEN=<signed-in user JWT>
 - 独立 Web Workspace 已完成真实浏览器检查，无 iframe
 - Supabase 事务/RLS 契约已在目标项目用回滚测试验证
 - Codex CLI 0.144.3 真实创建 Agent、Task 和 Handoff 成功
-- WorkBuddy 5.3.5 已确认内置标准 MCP 能力，并已写入本机 MCP 配置；重启后完成真实 Handoff 接收/回信验收
+- WorkBuddy 5.3.5 已完成真实客户端核心闭环：Workspace v9、Handoff v2/accepted、Message 已回传；标准 MCP Transport 仍需在连接器管理中信任服务器后补做工具直调验收
 
 测试指南见 [BETA_TESTING.md](BETA_TESTING.md)，发布前检查见 [PUBLIC_BETA_CHECKLIST.md](PUBLIC_BETA_CHECKLIST.md)。
 
