@@ -7,7 +7,7 @@ My Whiteboard is an Agent-neutral, local-first shared visual workspace. It is no
 ## Target architecture
 
 ```text
-Codex Plugin      Claude Code      Other MCP Client
+Codex Plugin      WorkBuddy        Other MCP Client
       \                |                /
                  MCP Adapter
                       |
@@ -23,7 +23,7 @@ Codex Plugin      Claude Code      Other MCP Client
   Standalone Web Workspace
 ```
 
-Core contains no client-specific branches. Codex packaging and Claude configuration are adapters around the same stdio MCP entry point.
+Core contains no client-specific branches. Codex packaging and WorkBuddy configuration are adapters around the same stdio MCP entry point.
 
 ## Project model
 
@@ -144,7 +144,7 @@ Legacy board tools remain compatibility wrappers during the migration window and
 - Assignment and Handoff.
 - Project Messages.
 - Entity conflict detection.
-- Codex to Claude to Codex closed-loop test without copied private chat.
+- Codex to WorkBuddy to Codex closed-loop test without copied private chat.
 
 ## Test strategy
 
@@ -154,5 +154,4 @@ Legacy board tools remain compatibility wrappers during the migration window and
 - MCP integration tests against the stdio server.
 - Browser tests for user edit persistence and selection.
 - Concurrent-process conflict tests.
-- Real Codex and Claude Code acceptance tests reported separately from mocks.
-
+- Real Codex and WorkBuddy acceptance tests reported separately from mocks.

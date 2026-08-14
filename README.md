@@ -1,6 +1,6 @@
 # My Whiteboard 0.2.0-alpha.1
 
-My Whiteboard 是面向编码工作的 Agent-neutral 可视化 Workspace。它把流程图、逻辑图、结构图和代码架构图放进项目目录，让 Codex、Claude Code 和其他 MCP 客户端围绕同一份语义状态协作。
+My Whiteboard 是面向编码工作的 Agent-neutral 可视化 Workspace。它把流程图、逻辑图、结构图和代码架构图放进项目目录，让 Codex、WorkBuddy 和其他 MCP 客户端围绕同一份语义状态协作。
 
 > Alpha 软件：请只使用非敏感测试内容。不要把密码、令牌、客户机密或受监管数据写进白板。
 
@@ -37,7 +37,7 @@ codex plugin add my-whiteboard@my-whiteboard
 
 ## MCP 客户端
 
-Codex 插件会自动注册 MCP Server。Claude Code 等客户端可把下列配置放入项目 `.mcp.json`，并把路径改成实际安装位置：
+Codex 插件会自动注册 MCP Server。WorkBuddy 等客户端可把下列配置合并到自己的 MCP 配置中，并把路径改成实际安装位置。WorkBuddy 5.3.5 在 Windows 上读取 `%USERPROFILE%\.workbuddy\.mcp.json`：
 
 ```json
 {
@@ -84,7 +84,7 @@ MY_WHITEBOARD_SUPABASE_ACCESS_TOKEN=<signed-in user JWT>
 - 独立 Web Workspace 已完成真实浏览器检查，无 iframe
 - Supabase 事务/RLS 契约已在目标项目用回滚测试验证
 - Codex CLI 0.144.3 真实创建 Agent、Task 和 Handoff 成功
-- Claude Code 2.1.175 已发现本机认证失效，需重新登录后完成最后一次真实 Handoff 接收验收
+- WorkBuddy 5.3.5 已确认内置标准 MCP 能力，并已写入本机 MCP 配置；重启后完成真实 Handoff 接收/回信验收
 
 测试指南见 [BETA_TESTING.md](BETA_TESTING.md)，发布前检查见 [PUBLIC_BETA_CHECKLIST.md](PUBLIC_BETA_CHECKLIST.md)。
 

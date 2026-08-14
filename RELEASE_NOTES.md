@@ -17,7 +17,7 @@ Known alpha limitations:
 
 - Supabase 登录用户 JWT 目前需要在启动 Codex 前通过环境变量提供。
 - Cloud Pull 会拒绝覆盖未推送的本地变化；自动冲突合并不在本 Alpha 范围。
-- Claude Code 的最终真实接收验收受本机失效认证阻塞，重新登录后需重跑。
+- WorkBuddy 5.3.5 已配置为第二真实 MCP 客户端；需要在重启加载配置后完成接收/回信验收。
 - Excalidraw 生产包较大，构建会出现非阻断 chunk-size 警告。
 
 ## Public Beta 5 — 2026-08-13

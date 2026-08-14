@@ -45,9 +45,9 @@
 ## F. 真实客户端
 
 - [ ] Codex CLI 连接 MCP、创建 Agent/Task/Handoff
-- [ ] Claude Code 连接同一 MCP、接受 Handoff、回传 Message
+- [ ] WorkBuddy 连接同一 MCP、接受 Handoff、回传 Message
 - [ ] 两个客户端看到相同 Entity Version 和最终状态
 
 ## 报告问题
 
-在 <https://github.com/ontheoasis13/MyWhiteBoard/issues> 提交：OS、Codex/Claude 版本、插件版本、复现步骤、期望/实际结果，以及去除隐私的截图。不要提交访问令牌、API Key、确认邮件链接或真实项目内容。
+在 <https://github.com/ontheoasis13/MyWhiteBoard/issues> 提交：OS、Codex/WorkBuddy 版本、插件版本、复现步骤、期望/实际结果，以及去除隐私的截图。不要提交访问令牌、API Key、确认邮件链接或真实项目内容。

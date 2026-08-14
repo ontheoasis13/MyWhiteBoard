@@ -8,7 +8,7 @@
 - [x] Supabase `002`—`004` 迁移和回滚事务测试
 - [x] Secret Key 精确扫描无命中
 - [x] 真实 Codex CLI 交接创建测试
-- [ ] 重新登录 Claude Code 并完成真实接收/回信测试
+- [ ] 重启 WorkBuddy 5.3.5 并完成真实接收/回信测试
 - [ ] 安装 `gh` 并认证
 - [ ] 推送 `agent/workspace-v0.2`、baseline tag 和 release tag
 - [ ] 创建 Draft PR，审阅后合并到 `main`
