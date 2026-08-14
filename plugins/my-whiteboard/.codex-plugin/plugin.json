@@ -1,6 +1,6 @@
 {
   "name": "my-whiteboard",
-  "version": "0.2.0-alpha.1",
+  "version": "0.2.0-alpha.1+codex.20260814045649",
   "description": "An Agent-neutral, local-first shared visual workspace with semantic boards, project state, tasks, context, history, and optional cloud collaboration.",
   "author": {
     "name": "NCKZ"
