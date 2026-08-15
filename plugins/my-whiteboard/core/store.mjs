@@ -18,6 +18,18 @@ const LOCK_RETRY_MS = 35;
 const LOCK_TIMEOUT_MS = 7_500;
 const STALE_LOCK_MS = 30_000;
 
+/**
+ * Agent presence timeout in milliseconds.
+ *
+ * When readWorkspace returns an Agent whose lastSeenAt is older than this
+ * threshold (or missing/invalid), the returned status is overridden to
+ * "offline". This is a pure read-time computation — the persisted value in
+ * workspace.json is never changed, workspaceVersion is never advanced, and no
+ * event is emitted. Only a real agent_connect / agent_sync call refreshes
+ * lastSeenAt and restores the persisted status.
+ */
+export const PRESENCE_TIMEOUT_MS = 5 * 60 * 1000;
+
 export function workspacePaths(projectRoot) {
   const root = path.resolve(projectRoot);
   const directory = path.join(root, ".my-whiteboard");
@@ -114,8 +126,44 @@ export async function createProjectWorkspace(projectRoot, options = {}) {
   });
 }
 
+/**
+ * Override persisted Agent status to "offline" when lastSeenAt is older than
+ * PRESENCE_TIMEOUT_MS, missing, or unparseable. This is a read-time
+ * computation only — it mutates the in-memory clone returned to callers but
+ * never touches workspace.json on disk, never advances workspaceVersion, and
+ * never emits an event.
+ *
+ * Safe defaults: missing / invalid / unparseable lastSeenAt → "offline".
+ */
+function applyRuntimePresence(workspace) {
+  const now = Date.now();
+  const agents = workspace.entities?.agents;
+  if (!agents || typeof agents !== "object") return workspace;
+  for (const agent of Object.values(agents)) {
+    let lastSeenMs = NaN;
+    if (agent.lastSeenAt) {
+      try { lastSeenMs = new Date(agent.lastSeenAt).getTime(); } catch { lastSeenMs = NaN; }
+    }
+    if (!Number.isFinite(lastSeenMs) || now - lastSeenMs > PRESENCE_TIMEOUT_MS) {
+      agent.status = "offline";
+    }
+  }
+  return workspace;
+}
+
 export async function readWorkspace(projectRoot) {
-  return clone(await readWorkspaceFile(workspacePaths(projectRoot).workspace));
+  const resolved = path.resolve(projectRoot);
+  const workspace = clone(await readWorkspaceFile(workspacePaths(resolved).workspace));
+  // Rebind project.root to the current runtime path so that a workspace
+  // cloned or moved to a different machine always reports its actual location.
+  // This is a pure in-memory correction — the persisted value is unchanged
+  // unless a real write transaction updates it later.
+  if (workspace.project.root !== resolved) {
+    workspace.project.root = resolved;
+  }
+  // Infer runtime Agent presence from lastSeenAt recency.
+  applyRuntimePresence(workspace);
+  return workspace;
 }
 
 export async function getChangesSince(projectRoot, sinceVersion = 0) {

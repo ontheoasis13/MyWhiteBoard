@@ -11,3 +11,5 @@ preview*.err
 *.export.json
 .my-whiteboard/lock
 .my-whiteboard/snapshots/
+.trae/
+.workbuddy/
