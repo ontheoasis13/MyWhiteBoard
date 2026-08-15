@@ -1,6 +1,6 @@
 param(
   [string]$Source = "ontheoasis13/MyWhiteBoard",
-  [string]$Ref = "v0.2.0-alpha.1"
+  [string]$Ref = "v0.2.0-alpha.2"
 )
 
 $ErrorActionPreference = "Stop"

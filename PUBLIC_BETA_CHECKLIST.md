@@ -2,9 +2,13 @@
 
 - [x] Beta 5 完整备份、SHA-256、baseline commit/tag
 - [x] 0.2 独立开发分支
-- [x] 19 项自动测试、28 工具烟雾测试
+- [x] 34 项自动测试、28 工具烟雾测试
 - [x] TypeScript、生产构建、npm audit、Plugin/Skill 校验
 - [x] 独立浏览器工作区视觉检查，无 iframe
+- [x] 跨电脑 Git clone + WorkBuddy 接管验证
+- [x] Project Root 运行时 rebind（跨设备可移植性）
+- [x] Runtime Agent Presence（基于 lastSeenAt 推断，历史 Agent 不永久 connected）
+- [x] 验收 Task 状态清理（通过 MCP 版本化事务）
 - [x] Supabase `002`—`004` 迁移和回滚事务测试
 - [x] Secret Key 精确扫描无命中
 - [x] 真实 Codex CLI 交接创建测试

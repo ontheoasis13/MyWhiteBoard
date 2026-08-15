@@ -1,4 +1,4 @@
-# My Whiteboard 0.2.0-alpha.1
+# My Whiteboard 0.2.0-alpha.2
 
 My Whiteboard 是面向编码工作的 Agent-neutral 可视化 Workspace。它把流程图、逻辑图、结构图和代码架构图放进项目目录，让 Codex、WorkBuddy 和其他 MCP 客户端围绕同一份语义状态协作。
 
@@ -19,7 +19,7 @@ My Whiteboard 是面向编码工作的 Agent-neutral 可视化 Workspace。它�
 从 GitHub Release/Tag 安装：
 
 ```sh
-codex plugin marketplace add ontheoasis13/MyWhiteBoard --ref v0.2.0-alpha.1
+codex plugin marketplace add ontheoasis13/MyWhiteBoard --ref v0.2.0-alpha.2
 codex plugin add my-whiteboard@my-whiteboard
 ```
 
@@ -81,7 +81,7 @@ MY_WHITEBOARD_SUPABASE_ACCESS_TOKEN=<signed-in user JWT>
 
 ## 验收状态
 
-- 19 项自动测试通过
+- 34 项自动测试通过
 - 28 个 MCP 工具烟雾测试通过
 - 独立 Web Workspace 已完成真实浏览器检查，无 iframe
 - Supabase 事务/RLS 契约已在目标项目用回滚测试验证

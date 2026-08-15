@@ -2,7 +2,7 @@
 set -eu
 
 SOURCE="${1:-ontheoasis13/MyWhiteBoard}"
-REF="${2:-v0.2.0-alpha.1}"
+REF="${2:-v0.2.0-alpha.2}"
 
 if [ -d "$SOURCE" ]; then
   codex plugin marketplace add "$SOURCE"
