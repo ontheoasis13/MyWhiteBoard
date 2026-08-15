@@ -1,5 +1,18 @@
 # Release Notes
 
+## 0.2.0-alpha.3 — 2026-08-16
+
+### Release metadata fix
+
+- Fix `.codex-plugin/plugin.json` version: was stale `0.2.0-alpha.1+codex.20260814092814`, now `0.2.0-alpha.3`. This was the root cause of `codex plugin list` displaying the wrong version after the alpha.2 clean install.
+- Bump all current runtime version sources to `0.2.0-alpha.3` (package.json, package-lock.json, plugin README, repo README, installers).
+- Historical validation documents and Cloud independent version remain unchanged.
+- No source code, Core, Presence, Persistence, or MCP Schema changes.
+
+### Known limitations
+
+- Same as 0.2.0-alpha.2 — no functional changes.
+
 ## 0.2.0-alpha.2 — 2026-08-15
 
 ### Real collaboration validated

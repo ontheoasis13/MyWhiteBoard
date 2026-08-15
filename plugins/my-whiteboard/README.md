@@ -1,6 +1,6 @@
 # My Whiteboard Plugin
 
-Version: `0.2.0-alpha.2`
+Version: `0.2.0-alpha.3`
 
 这是 My Whiteboard 的可分发插件目录。它包含：
 
