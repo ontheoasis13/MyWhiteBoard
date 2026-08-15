@@ -1,37 +1,11 @@
-# Public Beta Privacy Notice
+# Alpha Privacy Notice
 
-Last updated: 2026-08-13
+Last updated: 2026-08-14
 
-My Whiteboard is local-first and offers optional cloud collaboration through Supabase.
+My Whiteboard 默认只在本机项目的 `.my-whiteboard/` 中处理 Semantic Boards、Context、Tasks、Decisions、Artifacts、Agent Identity、Handoffs、Messages、Event Log、快照和导出。
 
-## Data processed
+只有用户显式配置并调用 Cloud 工具时，Semantic Entity 文档、版本、事件、成员身份和时间戳才会发送到配置的 Supabase 项目。上传前会移除本机项目绝对路径。
 
-Local use may store board JSON, exported files, preferences, and local version history on the user's computer.
+Supabase Publishable Key 可随客户端分发；登录用户 JWT 只应存在于本机进程环境或受保护的认证存储。Secret/Service Role Key 不得进入插件、浏览器资产、Git、白板、日志或公开问题。
 
-When cloud features are used, the configured Supabase project may process:
-
-- Account identifiers and email address used for authentication
-- Board titles and structured board documents
-- Board ownership, membership, and viewer/editor roles
-- Version history and timestamps
-- Share-link identifiers, permissions, expiry, and revocation state
-
-## Why data is processed
-
-The data is used to authenticate users, save and synchronize boards, restore versions, enforce sharing permissions, and deliver Realtime collaboration.
-
-## Access and sharing
-
-Supabase row-level security limits access to the board owner, explicitly added members, and users allowed by the board's sharing state. Anyone receiving an active share link may be able to join with the permission attached to that link; users should revoke links they no longer need.
-
-## Retention and deletion
-
-Local files remain until the user deletes them. Cloud records remain until the associated board or account data is deleted by an authorized user or project operator. During the beta, users can request help through <https://github.com/ontheoasis13/MyWhiteBoard/issues>; do not post personal data publicly. Open a minimal issue asking for a private contact channel.
-
-## Security and limitations
-
-The public client contains only a Supabase publishable key. Server secrets are not distributed. This is beta software and should not be used for sensitive, regulated, or business-critical information. No security system eliminates all risk.
-
-## Changes
-
-This notice may change as the beta evolves. Material changes should be documented in the repository release notes.
+本地文件由用户自行删除。云端记录由 Workspace 所有者或项目运营方按权限删除。Alpha 阶段只应使用非敏感测试数据。

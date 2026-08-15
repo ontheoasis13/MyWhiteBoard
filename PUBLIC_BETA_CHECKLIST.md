@@ -1,14 +1,23 @@
-# Maintainer Public Beta Checklist
+# Maintainer Alpha Release Checklist
 
-- [ ] Make the GitHub repository public, or explicitly invite every private beta tester
-- [ ] Keep `.agents`, `plugins`, installation scripts, and Markdown files at the repository root
-- [ ] Rotate any previously exposed Supabase secret key
-- [ ] Confirm no `.env`, secret key, access token, or database password is committed
-- [ ] Enable GitHub Issues and private vulnerability reporting
-- [ ] Configure Supabase authentication site URL, redirect URLs, and confirmation email
-- [ ] Confirm database backups, quotas, and usage alerts
-- [ ] Test installation on a clean Codex environment
-- [ ] Test sign-in and sync with two separate user accounts
-- [ ] Test viewer and editor permissions
-- [ ] Publish the ZIP checksum with the release
-- [ ] Review `PRIVACY.md`, `SECURITY.md`, and `SUPPORT.md` before announcing the beta
+- [x] Beta 5 完整备份、SHA-256、baseline commit/tag
+- [x] 0.2 独立开发分支
+- [x] 34 项自动测试、28 工具烟雾测试
+- [x] TypeScript、生产构建、npm audit、Plugin/Skill 校验
+- [x] 独立浏览器工作区视觉检查，无 iframe
+- [x] 跨电脑 Git clone + WorkBuddy 接管验证
+- [x] Project Root 运行时 rebind（跨设备可移植性）
+- [x] Runtime Agent Presence（基于 lastSeenAt 推断，历史 Agent 不永久 connected）
+- [x] 验收 Task 状态清理（通过 MCP 版本化事务）
+- [x] Supabase `002`—`004` 迁移和回滚事务测试
+- [x] Secret Key 精确扫描无命中
+- [x] 真实 Codex CLI 交接创建测试
+- [x] WorkBuddy 5.3.5 完成真实客户端核心接收/回信测试（Workspace v9、Handoff v2）
+- [x] 在 WorkBuddy 连接器管理中信任 `my-whiteboard`，完成真实 MCP Transport 工具直调
+- [ ] 安装 `gh` 并认证
+- [ ] 推送 `agent/workspace-v0.2`、baseline tag 和 release tag
+- [ ] 创建 Draft PR，审阅后合并到 `main`
+- [ ] 在干净 Codex 环境从 GitHub tag 安装
+- [ ] 用两个真实 Supabase 用户做跨设备/RLS 测试
+- [ ] GitHub 开启 Issues 与 private vulnerability reporting
+- [ ] 发布 ZIP SHA-256 与已知限制

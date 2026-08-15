@@ -3,82 +3,108 @@ import readline from "node:readline";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdtemp, writeFile } from "node:fs/promises";
 
-const testStorage = await mkdtemp(path.join(os.tmpdir(), "my-whiteboard-test-"));
-const testConfig = await mkdtemp(path.join(os.tmpdir(), "my-whiteboard-config-test-"));
+const projectRoot = await mkdtemp(path.join(os.tmpdir(), "my-whiteboard-workspace-smoke-"));
+await writeFile(path.join(projectRoot, "index.js"), "import { answer } from './value.js';\nconsole.log(answer);\n", "utf8");
+await writeFile(path.join(projectRoot, "value.js"), "export const answer = 42;\n", "utf8");
 
 const child = spawn(process.execPath, [fileURLToPath(new URL("./server.mjs", import.meta.url))], {
   stdio: ["pipe", "pipe", "inherit"],
-  env: {
-    ...process.env,
-    MY_WHITEBOARD_CONFIG_HOME: testConfig,
-    MY_WHITEBOARD_HOME: "",
-  },
+  env: { ...process.env, MY_WHITEBOARD_WORKSPACE_IDLE_MS: "5000" },
 });
-const output = readline.createInterface({ input: child.stdout, crlfDelay: Infinity });
+const lines = readline.createInterface({ input: child.stdout, crlfDelay: Infinity });
 const pending = new Map();
 let sequence = 0;
-output.on("line", (line) => {
+lines.on("line", (line) => {
   const message = JSON.parse(line);
-  const resolver = pending.get(message.id);
-  if (resolver) { pending.delete(message.id); resolver(message); }
+  const callback = pending.get(message.id);
+  if (callback) { pending.delete(message.id); callback(message); }
 });
+
 function request(method, params = {}) {
   const id = ++sequence;
   child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id, method, params })}\n`);
   return new Promise((resolve, reject) => {
     pending.set(id, resolve);
-    setTimeout(() => reject(new Error(`Timed out: ${method}`)), 8000);
+    setTimeout(() => reject(new Error(`Timed out: ${method}`)), 10_000);
   });
 }
-function assert(value, message) { if (!value) throw new Error(message); }
+
+function assert(value, message) {
+  if (!value) throw new Error(message);
+}
+
+function parseTextFallback(result) {
+  const marker = "\n\nStructured result (JSON):\n";
+  const text = result.content?.find((item) => item.type === "text")?.text || "";
+  const markerIndex = text.indexOf(marker);
+  assert(markerIndex >= 0, "MCP text fallback is missing");
+  return JSON.parse(text.slice(markerIndex + marker.length));
+}
 
 try {
-  const init = await request("initialize", { protocolVersion: "2025-11-25", capabilities: {} });
-  assert(init.result?.serverInfo?.name === "My Whiteboard", "initialize failed");
+  const initialized = await request("initialize", { protocolVersion: "2025-11-25", capabilities: {} });
+  assert(initialized.result?.serverInfo?.name === "My Whiteboard Workspace", "initialize failed");
   const listed = await request("tools/list");
-  assert(listed.result.tools.length === 19, "unexpected tool count");
-  const renderedTool = listed.result.tools.find((tool) => tool.name === "render_board");
-  assert(renderedTool, "render tool missing");
-  const configured = await request("tools/call", { name: "set_storage_directory", arguments: { directory: testStorage } });
-  assert(configured.result.structuredContent.root === testStorage, "storage configuration failed");
-  const storage = await request("tools/call", { name: "get_storage_info", arguments: {} });
-  assert(storage.result.structuredContent.root === testStorage, "portable storage lookup failed");
-  assert(storage.result.structuredContent.overridden_by_environment === false, "unexpected environment override");
-  const projectRoot = path.join(testStorage, "sample-project");
-  await mkdir(projectRoot, { recursive: true });
-  await writeFile(path.join(projectRoot, "index.js"), "export const answer = 42;\n", "utf8");
-  const codeBoard = await request("tools/call", { name: "create_code_board", arguments: { title: "Auth architecture", project_root: projectRoot } });
-  const codeBoardId = codeBoard.result.structuredContent.board_id;
-  assert(codeBoard.result.structuredContent.path.includes(`${path.sep}.codex${path.sep}whiteboards${path.sep}`), "project board path missing");
-  assert(codeBoard.result.structuredContent.scanned_files >= 1, "project scan failed");
-  await request("tools/call", { name: "add_elements", arguments: { board_id: codeBoardId, elements: [{ id: "auth-node", type: "rectangle", x: 100, y: 100, width: 220, height: 90, text: "Auth service" }, { id: "db-node", type: "rectangle", x: 440, y: 100, width: 220, height: 90, text: "Database" }, { id: "auth-db", type: "arrow", x: 320, y: 145, points: [[0, 0], [120, 0]], sourceId: "auth-node", targetId: "db-node" }] } });
-  const linked = await request("tools/call", { name: "link_code_elements", arguments: { board_id: codeBoardId, links: [{ id: "auth-node", code: { file: "src/auth/service.ts", symbol: "AuthService", line: 42, kind: "class" }, status: "处理中", riskTags: ["高耦合"], testRefs: ["tests/auth.test.ts"] }] } });
-  assert(linked.result.structuredContent.ids[0] === "auth-node", "code link failed");
-  const analysis = await request("tools/call", { name: "analyze_code_board", arguments: { board_id: codeBoardId } });
-  assert(analysis.result.structuredContent.analysis.nodes >= 2 && analysis.result.structuredContent.analysis.tests.length === 1, "code analysis failed");
-  const created = await request("tools/call", { name: "create_board", arguments: { title: "Contact form acceptance", template: "contact-form" } });
-  const boardId = created.result.structuredContent.board_id;
-  assert(created.result.structuredContent.element_count === 12, "contact template incomplete");
-  const query = await request("tools/call", { name: "query_elements", arguments: { board_id: boardId, ids: ["submit-button"] } });
-  assert(query.result.structuredContent.elements[0].text === "Send message", "query failed");
-  const update = await request("tools/call", { name: "update_elements", arguments: { board_id: boardId, elements: [{ id: "submit-button", text: "Send it" }] } });
-  assert(update.result.structuredContent.ids[0] === "submit-button", "update failed");
-  const context = await request("tools/call", { name: "get_board_context", arguments: { board_id: boardId } });
-  assert(context.result.structuredContent.board.id === boardId, "board context failed");
-  const history = await request("tools/call", { name: "get_board_history", arguments: { board_id: boardId } });
-  assert(history.result.structuredContent.versions.length >= 2, "version history failed");
-  const exported = await request("tools/call", { name: "export_board", arguments: { board_id: boardId, format: "svg" } });
-  assert(exported.result.structuredContent.path.endsWith(".svg"), "SVG export failed");
-  const png = await request("tools/call", { name: "export_board", arguments: { board_id: boardId, format: "png" } });
-  assert(png.result.structuredContent.path.endsWith(".png"), "PNG export failed");
-  const opened = await request("tools/call", { name: "open_board", arguments: { board_id: boardId } });
+  assert(listed.result.tools.length === 28, "unexpected workspace tool count");
+  assert(listed.result.tools.every((tool) => !tool._meta?.["openai/outputTemplate"]), "iframe output template remains");
+  const project = await request("tools/call", { name: "project_create", arguments: { project_root: projectRoot, name: "Smoke Project", actor: { id: "codex", client: "codex" } } });
+  assert(project.result.structuredContent.workspaceVersion === 1, "project creation failed");
+  const agent = await request("tools/call", { name: "agent_connect", arguments: { project_root: projectRoot, agent: { id: "codex", displayName: "Codex", client: "codex", capabilities: ["code", "board"] } } });
+  assert(agent.result.structuredContent.agent.version === 1, "Agent identity failed");
+  const claude = await request("tools/call", { name: "agent_connect", arguments: { project_root: projectRoot, agent: { id: "claude", displayName: "Claude", client: "claude", capabilities: ["review"] } } });
+  assert(claude.result.structuredContent.agent.version === 1, "second Agent identity failed");
+  const context = await request("tools/call", { name: "context_apply", arguments: { project_root: projectRoot, changes: [{ op: "create", entity: { id: "goal", title: "Goal", content: "Verify Single-Agent Workspace", sources: ["README.md"] } }] } });
+  assert(context.result.structuredContent.entities.goal.version === 1, "context creation failed");
+  const tasks = await request("tools/call", { name: "tasks_apply", arguments: { project_root: projectRoot, changes: [{ op: "create", entity: { id: "verify", title: "Verify workspace", assigneeAgentId: "codex" } }] } });
+  assert(tasks.result.structuredContent.entities.verify.status === "todo", "task creation failed");
+  const decisions = await request("tools/call", { name: "decisions_apply", arguments: { project_root: projectRoot, changes: [{ op: "create", entity: { id: "authority", title: "Semantic authority", rationale: "One authoritative state", status: "accepted" } }] } });
+  assert(decisions.result.structuredContent.entities.authority.status === "accepted", "decision creation failed");
+  const artifacts = await request("tools/call", { name: "artifacts_apply", arguments: { project_root: projectRoot, changes: [{ op: "create", entity: { id: "state", title: "Workspace state", kind: "file", path: ".my-whiteboard/workspace.json" } }] } });
+  assert(artifacts.result.structuredContent.entities.state.kind === "file", "artifact creation failed");
+  const created = await request("tools/call", { name: "board_create", arguments: { project_root: projectRoot, id: "architecture", title: "Architecture", elements: [{ id: "api", kind: "node", semanticType: "service", label: "API" }, { id: "db", kind: "node", semanticType: "database", label: "DB" }, { id: "api-db", kind: "edge", semanticType: "dependency", label: "reads", properties: { sourceId: "api", targetId: "db" } }] } });
+  assert(created.result.structuredContent.board.elements.api.version === 1, "semantic board creation failed");
+  const handoff = await request("tools/call", { name: "handoff_create", arguments: { project_root: projectRoot, handoff: { id: "review-handoff", title: "Review", summary: "Review the architecture board", fromAgentId: "codex", toAgentId: "claude", taskIds: ["verify"], artifactIds: ["state"], boardIds: ["architecture"] } } });
+  assert(handoff.result.structuredContent.handoff.version === 1, "handoff creation failed");
+  const accepted = await request("tools/call", { name: "handoff_update", arguments: { project_root: projectRoot, handoff_id: "review-handoff", expected_version: 1, patch: { status: "accepted" }, actor: { id: "claude", client: "claude" } } });
+  assert(accepted.result.structuredContent.handoff.version === 2, "handoff update failed");
+  const message = await request("tools/call", { name: "message_send", arguments: { project_root: projectRoot, message: { fromAgentId: "claude", toAgentId: "codex", kind: "response", body: "Review started" } } });
+  const inbox = await request("tools/call", { name: "messages_get", arguments: { project_root: projectRoot, agent_id: "codex" } });
+  assert(inbox.result.structuredContent.messages.some((item) => item.id === message.result.structuredContent.message.id), "Agent message failed");
+const synchronized = await request("tools/call", {
+  name: "agent_sync",
+  arguments: {
+    project_root: projectRoot,
+    agent: {
+      id: "codex",
+      displayName: "Codex",
+      client: "codex",
+      capabilities: ["code", "board"],
+    },
+    since_version: accepted.result.structuredContent.workspaceVersion,
+  },
+});
+  assert(synchronized.result.structuredContent.events.some((event) => event.type === "message.created"), "Agent Delta sync failed");
+  const synchronizedText = parseTextFallback(synchronized.result);
+  assert(synchronizedText.agent.version === synchronized.result.structuredContent.agent.version, "text-only Agent result is incomplete");
+  const applied = await request("tools/call", { name: "board_apply", arguments: { project_root: projectRoot, board_id: "architecture", changes: [{ op: "update", id: "api", expectedVersion: 1, patch: { label: "Gateway" } }] } });
+  assert(applied.result.structuredContent.elementVersions.api === 2, "entity version update failed");
+  const stale = await request("tools/call", { name: "board_apply", arguments: { project_root: projectRoot, board_id: "architecture", changes: [{ op: "update", id: "api", expectedVersion: 1, patch: { label: "Stale" } }] } });
+  assert(stale.error?.data?.code === "VERSION_CONFLICT", "stale update did not conflict");
+  const codeBoard = await request("tools/call", { name: "code_board_create", arguments: { project_root: projectRoot, title: "Code", max_files: 10 } });
+  assert(codeBoard.result.structuredContent.scannedFiles.length === 2, "code scan failed");
+  const delta = await request("tools/call", { name: "workspace_get_changes", arguments: { project_root: projectRoot, since_version: 1 } });
+  assert(delta.result.structuredContent.events.length >= 3, "workspace delta failed");
+  const deltaText = parseTextFallback(delta.result);
+  assert(deltaText.events.length === delta.result.structuredContent.events.length, "text-only Delta result is incomplete");
+  const exported = await request("tools/call", { name: "board_export", arguments: { project_root: projectRoot, board_id: "architecture", format: "svg" } });
+  assert(exported.result.structuredContent.path.endsWith(".svg"), "semantic export failed");
+  const opened = await request("tools/call", { name: "workspace_open", arguments: { project_root: projectRoot, board_id: "architecture" } });
+  assert(opened.result.structuredContent.embedded === false, "workspace attempted iframe embedding");
   const response = await fetch(opened.result.structuredContent.url);
-  assert(response.ok && (await response.text()).includes("My Whiteboard"), "canvas HTTP server failed");
-  const rendered = await request("tools/call", { name: "render_board", arguments: { board_id: boardId } });
-  assert(rendered.result.structuredContent.embedded === false && rendered.result.structuredContent.url.startsWith("http://127.0.0.1:"), "direct render failed");
-  process.stdout.write(`${JSON.stringify({ ok: true, board_id: boardId, url: opened.result.structuredContent.url, svg: exported.result.structuredContent.path, png: png.result.structuredContent.path }, null, 2)}\n`);
+  assert(response.ok && (await response.text()).includes("My Whiteboard 工作区"), "standalone workspace failed");
+  process.stdout.write(`${JSON.stringify({ ok: true, project_root: projectRoot, board_id: "architecture", url: opened.result.structuredContent.url, tools: listed.result.tools.length }, null, 2)}\n`);
 } finally {
   child.kill();
 }

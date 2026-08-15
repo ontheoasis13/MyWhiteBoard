@@ -1,0 +1,11 @@
+.DS_Store
+Thumbs.db
+node_modules/
+.env
+.env.*
+!.env.example
+*.log
+preview*.out
+preview*.err
+*.whiteboard.json
+*.export.json

@@ -1,0 +1,43 @@
+{
+  "name": "my-whiteboard",
+  "version": "0.2.0-alpha.3",
+  "description": "An Agent-neutral, local-first shared visual workspace with semantic boards, project state, tasks, context, history, and optional cloud collaboration.",
+  "author": {
+    "name": "NCKZ"
+  },
+  "homepage": "https://github.com/ontheoasis13/MyWhiteBoard",
+  "repository": "https://github.com/ontheoasis13/MyWhiteBoard",
+  "license": "MIT",
+  "keywords": [
+    "whiteboard",
+    "wireframe",
+    "diagram",
+    "canvas",
+    "local-first"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "My Whiteboard",
+    "shortDescription": "Shared visual workspace for people and AI Agents",
+    "longDescription": "Create persistent Agent-neutral projects with semantic whiteboards, shared context, tasks, decisions, artifacts, history, handoffs, and optional Supabase collaboration. Codex connects through the plugin while other MCP clients use the same Core.",
+    "developerName": "NCKZ",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive",
+      "Write",
+      "Agent-neutral",
+      "Cross-platform",
+      "Local-first",
+      "Cloud sync",
+      "Realtime collaboration",
+      "Version history"
+    ],
+    "defaultPrompt": [
+      "Create a project workspace and map its architecture.",
+      "Open the current semantic board and refine it.",
+      "Show tasks, decisions, and changes since my last read."
+    ],
+    "brandColor": "#6D5EF7"
+  }
+}
