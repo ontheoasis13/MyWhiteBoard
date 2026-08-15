@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "workspaceVersion": 75,
+  "workspaceVersion": 76,
   "project": {
     "id": "complex-ai-workbench",
     "entityType": "project",
@@ -988,7 +988,7 @@
     },
     "tasks": {
       "task-model-mcp": {
-        "status": "in_progress",
+        "status": "done",
         "priority": "high",
         "description": "Document the client-to-MCP entry point and validation contract.",
         "dependsOn": [],
@@ -997,12 +997,12 @@
         "title": "Model the agent-neutral MCP boundary",
         "id": "task-model-mcp",
         "entityType": "task",
-        "version": 2,
+        "version": 3,
         "createdAt": "2026-08-14T06:34:23.300Z",
-        "updatedAt": "2026-08-14T06:34:35.903Z"
+        "updatedAt": "2026-08-15T14:47:43.644Z"
       },
       "task-model-core": {
-        "status": "in_progress",
+        "status": "done",
         "priority": "high",
         "description": "Show transactional Core persistence and authoritative semantic state.",
         "dependsOn": [
@@ -1013,12 +1013,12 @@
         "title": "Map Core and Semantic Board State",
         "id": "task-model-core",
         "entityType": "task",
-        "version": 2,
+        "version": 3,
         "createdAt": "2026-08-14T06:34:23.300Z",
-        "updatedAt": "2026-08-14T06:34:35.903Z"
+        "updatedAt": "2026-08-15T14:47:43.644Z"
       },
       "task-model-adapter": {
-        "status": "todo",
+        "status": "done",
         "priority": "medium",
         "description": "Show the adapter as a projection of semantic board state.",
         "dependsOn": [
@@ -1029,12 +1029,12 @@
         "title": "Map Excalidraw adapter projection",
         "id": "task-model-adapter",
         "entityType": "task",
-        "version": 2,
+        "version": 3,
         "createdAt": "2026-08-14T06:34:23.300Z",
-        "updatedAt": "2026-08-14T06:34:35.903Z"
+        "updatedAt": "2026-08-15T14:47:43.644Z"
       },
       "task-verify-persistence": {
-        "status": "todo",
+        "status": "done",
         "priority": "high",
         "description": "Re-read the completed workspace through MCP.",
         "dependsOn": [
@@ -1045,12 +1045,12 @@
         "title": "Verify durable workspace persistence",
         "id": "task-verify-persistence",
         "entityType": "task",
-        "version": 2,
+        "version": 3,
         "createdAt": "2026-08-14T06:34:23.300Z",
-        "updatedAt": "2026-08-14T06:34:35.903Z"
+        "updatedAt": "2026-08-15T14:47:43.644Z"
       },
       "task-acceptance-summary": {
-        "status": "todo",
+        "status": "done",
         "priority": "medium",
         "description": "Report all validation outcomes and versioned IDs.",
         "dependsOn": [
@@ -1061,9 +1061,9 @@
         "title": "Produce acceptance summary",
         "id": "task-acceptance-summary",
         "entityType": "task",
-        "version": 2,
+        "version": 3,
         "createdAt": "2026-08-14T06:34:23.300Z",
-        "updatedAt": "2026-08-14T06:34:35.903Z"
+        "updatedAt": "2026-08-15T14:47:43.644Z"
       },
       "task-workbuddy-ui-ux": {
         "status": "done",
@@ -5913,8 +5913,113 @@
         },
         "version": 14
       }
+    },
+    {
+      "id": "ab66fdd7-7a5d-462a-a307-79670e55fc1b",
+      "transactionId": "d05edcb4-4a64-4cab-a245-a63c9a58284b",
+      "workspaceVersion": 76,
+      "index": 0,
+      "type": "task.updated",
+      "entityType": "task",
+      "entityId": "task-model-mcp",
+      "actor": {
+        "id": "workbuddy-takeover-agent",
+        "displayName": "WorkBuddy Takeover Agent",
+        "client": "WorkBuddy"
+      },
+      "timestamp": "2026-08-15T14:47:43.644Z",
+      "payload": {
+        "patch": {
+          "status": "done"
+        },
+        "version": 3
+      }
+    },
+    {
+      "id": "99c107f8-27fc-4254-ae5b-77f8b9ed73a0",
+      "transactionId": "d05edcb4-4a64-4cab-a245-a63c9a58284b",
+      "workspaceVersion": 76,
+      "index": 1,
+      "type": "task.updated",
+      "entityType": "task",
+      "entityId": "task-model-core",
+      "actor": {
+        "id": "workbuddy-takeover-agent",
+        "displayName": "WorkBuddy Takeover Agent",
+        "client": "WorkBuddy"
+      },
+      "timestamp": "2026-08-15T14:47:43.644Z",
+      "payload": {
+        "patch": {
+          "status": "done"
+        },
+        "version": 3
+      }
+    },
+    {
+      "id": "35bc963d-2e97-4bb4-8ac9-e3da7e6843a8",
+      "transactionId": "d05edcb4-4a64-4cab-a245-a63c9a58284b",
+      "workspaceVersion": 76,
+      "index": 2,
+      "type": "task.updated",
+      "entityType": "task",
+      "entityId": "task-model-adapter",
+      "actor": {
+        "id": "workbuddy-takeover-agent",
+        "displayName": "WorkBuddy Takeover Agent",
+        "client": "WorkBuddy"
+      },
+      "timestamp": "2026-08-15T14:47:43.644Z",
+      "payload": {
+        "patch": {
+          "status": "done"
+        },
+        "version": 3
+      }
+    },
+    {
+      "id": "fcc6ef44-b5b8-4d85-a804-aa9acb29809b",
+      "transactionId": "d05edcb4-4a64-4cab-a245-a63c9a58284b",
+      "workspaceVersion": 76,
+      "index": 3,
+      "type": "task.updated",
+      "entityType": "task",
+      "entityId": "task-verify-persistence",
+      "actor": {
+        "id": "workbuddy-takeover-agent",
+        "displayName": "WorkBuddy Takeover Agent",
+        "client": "WorkBuddy"
+      },
+      "timestamp": "2026-08-15T14:47:43.644Z",
+      "payload": {
+        "patch": {
+          "status": "done"
+        },
+        "version": 3
+      }
+    },
+    {
+      "id": "d8dd931c-a787-49b4-a913-03418624ee3f",
+      "transactionId": "d05edcb4-4a64-4cab-a245-a63c9a58284b",
+      "workspaceVersion": 76,
+      "index": 4,
+      "type": "task.updated",
+      "entityType": "task",
+      "entityId": "task-acceptance-summary",
+      "actor": {
+        "id": "workbuddy-takeover-agent",
+        "displayName": "WorkBuddy Takeover Agent",
+        "client": "WorkBuddy"
+      },
+      "timestamp": "2026-08-15T14:47:43.644Z",
+      "payload": {
+        "patch": {
+          "status": "done"
+        },
+        "version": 3
+      }
     }
   ],
   "createdAt": "2026-08-14T06:32:37.501Z",
-  "updatedAt": "2026-08-14T09:32:20.807Z"
+  "updatedAt": "2026-08-15T14:47:43.644Z"
 }
