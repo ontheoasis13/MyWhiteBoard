@@ -34,5 +34,11 @@
   "typecheck": "pass",
   "build": "pass",
   "mcpSmoke": "pass (42 tools)",
+  "connectorCache": {
+    "status": "environment-note",
+    "issue": "Desktop connector cache lacks 0.2.0-alpha.3/scripts/workspace-server.mjs",
+    "productCodeImpact": false,
+    "action": "Refresh/reinstall the plugin cache before invoking cached workspace_open"
+  },
   "phase3Started": false
 }

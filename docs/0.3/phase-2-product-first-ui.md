@@ -30,4 +30,8 @@ Phase 2 把 Living Project Model 的 Product Map Projection 变成默认入口�
 
 Phase 2 Gate 完成后暂停，未进入 Phase 3。
 
+## 环境备注
+
+本次源仓库的 standalone runtime、HTTP 验收和 MCP smoke 均通过。当前桌面连接器缓存中缺少 `0.2.0-alpha.3/scripts/workspace-server.mjs`，直接从该旧缓存调用 `workspace_open` 会报 `MODULE_NOT_FOUND`；这是插件缓存刷新问题，不是本次仓库代码问题。重新安装/刷新该插件缓存后即可使用同一 standalone runtime。
+
 机器可读证据见 [`evidence/phase-2-results.json`](evidence/phase-2-results.json)。
