@@ -82,7 +82,8 @@ MY_WHITEBOARD_SUPABASE_ACCESS_TOKEN=<signed-in user JWT>
 ## 验收状态
 
 - 34 项自动测试通过
-- 28 个 MCP 工具烟雾测试通过
+- Proof A 层级收敛后保留 15 个 Grounded Feature，并通过 Human Intent 重启/重扫持久化验证
+- 38 个 MCP 工具烟雾测试通过；Proof B 已接入 Change Contract、Execution 生命周期与真实进程 Adapter
 - 独立 Web Workspace 已完成真实浏览器检查，无 iframe
 - Supabase 事务/RLS 契约已在目标项目用回滚测试验证
 - Codex CLI 0.144.3 真实创建 Agent、Task 和 Handoff 成功

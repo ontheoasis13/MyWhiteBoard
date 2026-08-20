@@ -5,7 +5,7 @@ Version: `0.2.0-alpha.3`
 这是 My Whiteboard 的可分发插件目录。它包含：
 
 - `core/`：Agent-neutral Semantic Workspace、Event Log、Entity OCC
-- `server/`：28 个 MCP 工具和独立 loopback Web Workspace
+- `server/`：38 个 MCP 工具和独立 loopback Web Workspace；其中包含 Change Contract 与 Agent Execution Bridge
 - `apps/workspace/`：React + Excalidraw 编辑器源码
 - `assets/workspace/`：离线可运行的生产构建与字体
 - `adapters/`：Excalidraw 和可选 Supabase 适配器
