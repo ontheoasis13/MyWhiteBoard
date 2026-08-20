@@ -1,0 +1,11 @@
+{
+  "name": "subscription-control-center",
+  "private": true,
+  "dependencies": {
+    "express": "latest",
+    "react": "latest"
+  },
+  "devDependencies": {
+    "vite": "latest"
+  }
+}

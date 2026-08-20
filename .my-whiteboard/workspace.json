@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "workspaceVersion": 76,
+  "workspaceVersion": 78,
   "project": {
     "id": "complex-ai-workbench",
     "entityType": "project",
@@ -1262,6 +1262,27 @@
         "version": 5,
         "createdAt": "2026-08-14T07:47:32.289Z",
         "updatedAt": "2026-08-14T08:48:13.090Z"
+      },
+      "codex-v0.3-grounding-agent": {
+        "status": "idle",
+        "capabilities": [
+          "product-grounding",
+          "code-analysis",
+          "proof-a-validation"
+        ],
+        "metadata": {
+          "phase": "proof-a",
+          "technicalGate": "passed",
+          "humanAcceptance": "pending"
+        },
+        "id": "codex-v0.3-grounding-agent",
+        "displayName": "Codex 0.3 Grounding Agent",
+        "client": "Codex",
+        "lastSeenAt": "2026-08-20T04:52:18.411Z",
+        "entityType": "agent",
+        "version": 2,
+        "createdAt": "2026-08-20T04:30:29.394Z",
+        "updatedAt": "2026-08-20T04:52:18.417Z"
       }
     },
     "handoffs": {
@@ -6018,8 +6039,77 @@
         },
         "version": 3
       }
+    },
+    {
+      "id": "6e3eb109-d41b-4c2d-b21a-6fbcc7878eab",
+      "transactionId": "41d49a4a-41aa-4388-a9d7-e7c1453a1e2a",
+      "workspaceVersion": 77,
+      "index": 0,
+      "type": "agent.created",
+      "entityType": "agent",
+      "entityId": "codex-v0.3-grounding-agent",
+      "actor": {
+        "id": "codex-v0.3-grounding-agent",
+        "displayName": "Codex 0.3 Grounding Agent",
+        "client": "Codex"
+      },
+      "timestamp": "2026-08-20T04:30:29.394Z",
+      "payload": {
+        "entity": {
+          "status": "working",
+          "capabilities": [
+            "product-grounding",
+            "code-analysis",
+            "proof-a-validation"
+          ],
+          "metadata": {},
+          "id": "codex-v0.3-grounding-agent",
+          "displayName": "Codex 0.3 Grounding Agent",
+          "client": "Codex",
+          "lastSeenAt": "2026-08-20T04:30:29.384Z",
+          "entityType": "agent",
+          "version": 1,
+          "createdAt": "2026-08-20T04:30:29.394Z",
+          "updatedAt": "2026-08-20T04:30:29.394Z"
+        }
+      }
+    },
+    {
+      "id": "7713ec09-9f07-40bf-ae78-acdc9c09c246",
+      "transactionId": "c502d41a-dc6e-4eae-a41e-ebc3de8841bc",
+      "workspaceVersion": 78,
+      "index": 0,
+      "type": "agent.updated",
+      "entityType": "agent",
+      "entityId": "codex-v0.3-grounding-agent",
+      "actor": {
+        "id": "codex-v0.3-grounding-agent",
+        "displayName": "Codex 0.3 Grounding Agent",
+        "client": "Codex"
+      },
+      "timestamp": "2026-08-20T04:52:18.417Z",
+      "payload": {
+        "patch": {
+          "id": "codex-v0.3-grounding-agent",
+          "displayName": "Codex 0.3 Grounding Agent",
+          "client": "Codex",
+          "status": "idle",
+          "capabilities": [
+            "product-grounding",
+            "code-analysis",
+            "proof-a-validation"
+          ],
+          "metadata": {
+            "phase": "proof-a",
+            "technicalGate": "passed",
+            "humanAcceptance": "pending"
+          },
+          "lastSeenAt": "2026-08-20T04:52:18.411Z"
+        },
+        "version": 2
+      }
     }
   ],
   "createdAt": "2026-08-14T06:32:37.501Z",
-  "updatedAt": "2026-08-15T14:47:43.644Z"
+  "updatedAt": "2026-08-20T04:52:18.417Z"
 }

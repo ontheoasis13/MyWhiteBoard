@@ -1,0 +1,121 @@
+{
+  "proof": "A-grounding",
+  "capturedAt": "2026-08-20T05:03:00.000Z",
+  "baseline": {
+    "branch": "agent/v0.3-control-loop",
+    "head": "d64e2bb67772fa24f98a1c5ed5370b25eab5473f",
+    "baselineTests": 34,
+    "baselineMcpTools": 28
+  },
+  "fixture": {
+    "project": "tests/fixtures/product-grounding-alias-app",
+    "codeGraph": {
+      "nodes": 11,
+      "edges": 11,
+      "priorFailureShape": "11 nodes / 0 edges",
+      "rootCause": "The previous scanner discarded non-relative @/* imports before resolution."
+    },
+    "stats": {
+      "scannedFiles": 11,
+      "resolvedReferences": 11,
+      "features": 3,
+      "evidence": 41,
+      "confirmedEvidence": 38,
+      "possibleEvidence": 3
+    },
+    "features": [
+      { "id": "feature-account", "name": "账号管理", "certainty": "possible", "groundingRefs": 5 },
+      { "id": "feature-billing", "name": "账单管理", "certainty": "possible", "groundingRefs": 9 },
+      { "id": "feature-settings", "name": "设置", "certainty": "possible", "groundingRefs": 5 }
+    ],
+    "evidenceTypes": {
+      "file": 11,
+      "reference": 11,
+      "symbol": 10,
+      "test": 2,
+      "page": 2,
+      "api": 2,
+      "semantic_inference": 3
+    },
+    "traceSample": {
+      "featureId": "feature-billing",
+      "observed": [
+        { "type": "page", "source": "src/app/billing/page.tsx", "target": "/billing", "line": 1, "certainty": "confirmed" },
+        { "type": "api", "source": "src/app/api/billing/route.ts", "target": "/api/billing", "line": 1, "certainty": "confirmed" },
+        { "type": "reference", "source": "src/app/billing/page.tsx", "target": "src/features/billing/service.ts", "line": 1, "certainty": "confirmed" }
+      ],
+      "inference": { "type": "semantic_inference", "certainty": "possible", "requiresEvidenceIds": true }
+    }
+  },
+  "realProject": {
+    "project": "plugins/my-whiteboard",
+    "qualification": "real medium TS/JS React + Vite + Node/MCP project",
+    "stats": {
+      "scannedFiles": 42,
+      "resolvedReferences": 58,
+      "features": 15,
+      "evidence": 279,
+      "confirmedEvidence": 264,
+      "possibleEvidence": 15
+    },
+    "features": [
+      "智能体协作",
+      "项目产物",
+      "可视化白板",
+      "云同步",
+      "代码地图",
+      "项目上下文",
+      "项目决策",
+      "智能体交接",
+      "旧版迁移",
+      "协作消息",
+      "产品地图",
+      "项目管理",
+      "聚焦上下文",
+      "任务管理",
+      "工作区"
+    ],
+    "evidenceTypes": {
+      "file": 42,
+      "reference": 58,
+      "symbol": 75,
+      "test": 50,
+      "database": 8,
+      "api": 31,
+      "semantic_inference": 15
+    },
+    "generatedAssetsExcluded": true,
+    "traceSample": {
+      "featureId": "feature-board",
+      "name": "可视化白板",
+      "observed": [
+        { "type": "api", "source": "server/mcp.mjs", "target": "mcp:board_create", "certainty": "confirmed" },
+        { "type": "api", "source": "server/mcp.mjs", "target": "mcp:board_get", "certainty": "confirmed" },
+        { "type": "api", "source": "server/mcp.mjs", "target": "mcp:board_apply", "certainty": "confirmed" },
+        { "type": "api", "source": "server/mcp.mjs", "target": "mcp:board_export", "certainty": "confirmed" },
+        { "type": "file", "source": "server/mcp.mjs", "target": "server/mcp.mjs", "certainty": "confirmed" }
+      ]
+    }
+  },
+  "humanCorrection": {
+    "featureId": "feature-billing",
+    "initialVersion": 1,
+    "correctedVersion": 2,
+    "correctedName": "订阅与账单",
+    "separateProcessRestartPreserved": true,
+    "rescanPreserved": true,
+    "latestObservedEvidencePreserved": true,
+    "staleExpectedVersionRejected": true,
+    "humanConfirmationEvidenceAdded": true
+  },
+  "mcpBoundary": {
+    "toolsAfterProofA": 31,
+    "addedTools": [
+      "product_grounding_scan",
+      "product_grounding_get",
+      "product_feature_correct"
+    ],
+    "structuredResultVerified": true,
+    "textFallbackVerified": true
+  }
+}

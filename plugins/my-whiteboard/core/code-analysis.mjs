@@ -1,35 +1,15 @@
-import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { createBoardEntity, slug } from "./schema.mjs";
 import { applyWorkspaceTransaction, createProjectWorkspace, readWorkspace } from "./store.mjs";
+import { scanProjectSources } from "./source-observation.mjs";
 
-const CODE_EXTENSIONS = new Set([".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".py", ".go", ".rs", ".java", ".kt", ".cs", ".rb", ".php", ".swift"]);
-const EXCLUDED_DIRECTORIES = new Set([".git", ".codex", ".my-whiteboard", "node_modules", "dist", "build", "coverage", ".next", ".venv", "venv"]);
+const CODE_BOARD_EXTENSIONS = new Set([".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".py", ".go", ".rs", ".java", ".kt", ".cs", ".rb", ".php", ".swift"]);
 
 export async function scanProjectGraph(projectRoot, maxFiles = 80) {
-  const root = path.resolve(projectRoot);
-  const files = [];
-  async function visit(directory) {
-    if (files.length >= maxFiles) return;
-    let entries = [];
-    try {
-      entries = await readdir(directory, { withFileTypes: true });
-    } catch {
-      return;
-    }
-    for (const entry of entries) {
-      if (files.length >= maxFiles) break;
-      if (entry.name.startsWith(".") && ![".github"].includes(entry.name)) continue;
-      if (EXCLUDED_DIRECTORIES.has(entry.name)) continue;
-      const full = path.join(directory, entry.name);
-      if (entry.isDirectory()) await visit(full);
-      else if (CODE_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) files.push(full);
-    }
-  }
-  await visit(root);
-  const relativeFiles = files.map((file) => path.relative(root, file).replaceAll(path.sep, "/"));
+  const scanned = await scanProjectSources(projectRoot, { maxFiles, extensions: CODE_BOARD_EXTENSIONS });
+  const relativeFiles = scanned.files.map((file) => file.relative);
   const byFile = new Map();
-  const columns = Math.max(1, Math.ceil(Math.sqrt(Math.max(1, files.length))));
+  const columns = Math.max(1, Math.ceil(Math.sqrt(Math.max(1, scanned.files.length))));
   const elements = [];
   for (const [index, relative] of relativeFiles.entries()) {
     const id = `file-${slug(relative).slice(0, 72)}`;
@@ -49,29 +29,26 @@ export async function scanProjectGraph(projectRoot, maxFiles = 80) {
       layout: { x: 80 + (index % columns) * 280, y: 80 + Math.floor(index / columns) * 150, width: 240, height: 100 },
     });
   }
-  for (const [index, file] of files.entries()) {
+  const edgeIds = new Set();
+  for (const [index, file] of scanned.files.entries()) {
     const relative = relativeFiles[index];
-    let source = "";
-    try { source = await readFile(file, "utf8"); } catch {}
-    const imports = [...source.matchAll(/(?:from\s*["']|require\(\s*["']|import\s*["'])([^"']+)["']/g)]
-      .map((match) => match[1])
-      .filter((specifier) => specifier.startsWith("."));
-    for (const specifier of imports) {
-      const base = path.posix.normalize(path.posix.join(path.posix.dirname(relative), specifier));
-      const candidates = [base, `${base}.js`, `${base}.mjs`, `${base}.ts`, `${base}.tsx`, `${base}.jsx`, `${base}/index.js`, `${base}/index.ts`, `${base}/index.tsx`];
-      const target = candidates.find((candidate) => byFile.has(candidate));
+    for (const dependency of file.imports) {
+      const target = dependency.target;
       if (!target || target === relative) continue;
+      const edgeId = `dependency-${byFile.get(relative)}-${byFile.get(target)}`.slice(0, 120);
+      if (edgeIds.has(edgeId)) continue;
+      edgeIds.add(edgeId);
       elements.push({
-        id: `dependency-${byFile.get(relative)}-${byFile.get(target)}`.slice(0, 120),
+        id: edgeId,
         kind: "edge",
         semanticType: "dependency",
         label: "imports",
-        properties: { sourceId: byFile.get(relative), targetId: byFile.get(target), points: [[0, 0], [160, 0]], style: { strokeColor: "#94a3b8", roughness: 0 } },
+        properties: { sourceId: byFile.get(relative), targetId: byFile.get(target), specifier: dependency.specifier, line: dependency.line, points: [[0, 0], [160, 0]], style: { strokeColor: "#94a3b8", roughness: 0 } },
         layout: { x: 0, y: 0, width: 160, height: 1 },
       });
     }
   }
-  return { root, files: relativeFiles, elements };
+  return { root: scanned.root, files: relativeFiles, elements, config: scanned.config, aliases: scanned.aliases };
 }
 
 export async function createProjectCodeBoard(projectRoot, options = {}) {

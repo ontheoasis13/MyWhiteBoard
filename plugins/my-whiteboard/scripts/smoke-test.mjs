@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { mkdtemp, writeFile } from "node:fs/promises";
 
 const projectRoot = await mkdtemp(path.join(os.tmpdir(), "my-whiteboard-workspace-smoke-"));
-await writeFile(path.join(projectRoot, "index.js"), "import { answer } from './value.js';\nconsole.log(answer);\n", "utf8");
+await writeFile(path.join(projectRoot, "index.js"), "import { answer } from './value.js';\napp.get('/api/answers', () => answer);\n", "utf8");
 await writeFile(path.join(projectRoot, "value.js"), "export const answer = 42;\n", "utf8");
 
 const child = spawn(process.execPath, [fileURLToPath(new URL("./server.mjs", import.meta.url))], {
@@ -47,7 +47,7 @@ try {
   const initialized = await request("initialize", { protocolVersion: "2025-11-25", capabilities: {} });
   assert(initialized.result?.serverInfo?.name === "My Whiteboard Workspace", "initialize failed");
   const listed = await request("tools/list");
-  assert(listed.result.tools.length === 28, "unexpected workspace tool count");
+  assert(listed.result.tools.length === 31, "unexpected workspace tool count");
   assert(listed.result.tools.every((tool) => !tool._meta?.["openai/outputTemplate"]), "iframe output template remains");
   const project = await request("tools/call", { name: "project_create", arguments: { project_root: projectRoot, name: "Smoke Project", actor: { id: "codex", client: "codex" } } });
   assert(project.result.structuredContent.workspaceVersion === 1, "project creation failed");
@@ -94,6 +94,13 @@ const synchronized = await request("tools/call", {
   assert(stale.error?.data?.code === "VERSION_CONFLICT", "stale update did not conflict");
   const codeBoard = await request("tools/call", { name: "code_board_create", arguments: { project_root: projectRoot, title: "Code", max_files: 10 } });
   assert(codeBoard.result.structuredContent.scannedFiles.length === 2, "code scan failed");
+  const grounding = await request("tools/call", { name: "product_grounding_scan", arguments: { project_root: projectRoot, max_files: 10 } });
+  const answerFeature = grounding.result.structuredContent.model.features["feature-answers"];
+  assert(answerFeature?.groundingRefs.length >= 2, "product grounding failed");
+  const correctedFeature = await request("tools/call", { name: "product_feature_correct", arguments: { project_root: projectRoot, feature_id: answerFeature.id, expected_version: answerFeature.version, patch: { name: "Answers" }, reason: "Smoke correction", actor: { id: "human", displayName: "Human", client: "smoke" } } });
+  assert(correctedFeature.result.structuredContent.feature.version === 2, "Human Intent correction failed");
+  const grounded = await request("tools/call", { name: "product_grounding_get", arguments: { project_root: projectRoot, include_evidence: false } });
+  assert(grounded.result.structuredContent.productMap.features.some((item) => item.id === answerFeature.id && item.name === "Answers"), "Product Map read failed");
   const delta = await request("tools/call", { name: "workspace_get_changes", arguments: { project_root: projectRoot, since_version: 1 } });
   assert(delta.result.structuredContent.events.length >= 3, "workspace delta failed");
   const deltaText = parseTextFallback(delta.result);

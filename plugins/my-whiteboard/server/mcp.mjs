@@ -11,12 +11,16 @@ import {
   createBoardEntity,
   createProjectCodeBoard,
   createProjectWorkspace,
+  correctProductFeature,
   discoverLegacyBoards,
   getChangesSince,
   getMessages,
   importLegacyBoards,
+  readProductGrounding,
   readWorkspace,
+  scanProductGrounding,
   sendMessage,
+  summarizeProductMap,
   syncAgent,
   updateHandoff,
   workspacePaths,
@@ -261,6 +265,39 @@ export const workspaceTools = [
     annotations: readOnly,
   },
   {
+    name: "product_grounding_scan",
+    title: "Scan a product-grounded project model",
+    description: "Build deterministic TS/JS code observations, traceable Evidence, and a Product Map while preserving durable Human Intent corrections.",
+    inputSchema: { type: "object", properties: { project_root: { type: "string" }, max_files: { type: "integer", minimum: 1, maximum: 2000 }, actor: actorSchema }, required: ["project_root"], additionalProperties: false },
+    annotations: mutating,
+  },
+  {
+    name: "product_grounding_get",
+    title: "Read the product-grounded project model",
+    description: "Read the current Product Map and its Feature-to-Evidence trace without scanning or changing the repository.",
+    inputSchema: { type: "object", properties: { project_root: { type: "string" }, include_evidence: { type: "boolean" } }, required: ["project_root"], additionalProperties: false },
+    annotations: readOnly,
+  },
+  {
+    name: "product_feature_correct",
+    title: "Persist a Human Intent correction",
+    description: "Correct a grounded Feature using Entity Version concurrency. The correction survives restart and rescan without overwriting observed code truth.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        project_root: { type: "string" },
+        feature_id: { type: "string" },
+        expected_version: { type: "integer", minimum: 1 },
+        patch: { type: "object", properties: { name: { type: "string" }, description: { type: "string" }, parentFeatureId: { oneOf: [{ type: "string" }, { type: "null" }] }, productState: { type: "string" }, actionability: { type: "string" }, hidden: { type: "boolean" } }, additionalProperties: false },
+        reason: { type: "string" },
+        actor: actorSchema,
+      },
+      required: ["project_root", "feature_id", "expected_version", "patch"],
+      additionalProperties: false,
+    },
+    annotations: mutating,
+  },
+  {
     name: "board_export",
     title: "Export Semantic Board",
     description: "Export the authoritative Semantic Board as JSON, SVG, or PNG under .my-whiteboard/exports.",
@@ -399,6 +436,19 @@ export async function callWorkspaceTool(name, args, httpService) {
     const workspace = await readWorkspace(args.project_root);
     const board = requireBoard(workspace, args.board_id);
     return content(`Code analysis for “${board.title}”.`, { boardId: board.id, analysis: analyzeSemanticCodeBoard(board), workspaceVersion: workspace.workspaceVersion });
+  }
+  if (name === "product_grounding_scan") {
+    const result = await scanProductGrounding(args.project_root, { maxFiles: args.max_files });
+    return content(`Grounded ${Object.keys(result.model.features).length} Product Feature(s) from ${result.model.stats.scannedFiles} source file(s).`, { productMap: summarizeProductMap(result.model), model: result.model, path: result.path });
+  }
+  if (name === "product_grounding_get") {
+    const model = await readProductGrounding(args.project_root);
+    const structured = { productMap: summarizeProductMap(model), model: args.include_evidence === false ? { ...model, evidence: {} } : model, path: path.join(path.resolve(args.project_root), ".my-whiteboard", "product-model.json") };
+    return content(`Product Map v${model.version} contains ${Object.keys(model.features).length} Feature(s).`, structured);
+  }
+  if (name === "product_feature_correct") {
+    const result = await correctProductFeature(args.project_root, { featureId: args.feature_id, expectedVersion: args.expected_version, patch: args.patch, reason: args.reason, actor: args.actor });
+    return content(`Feature “${result.feature.name}” corrected as Human Intent at v${result.feature.version}.`, { feature: result.feature, correction: result.correction, productMap: summarizeProductMap(result.model), path: result.path });
   }
   if (name === "board_export") {
     const workspace = await readWorkspace(args.project_root);
