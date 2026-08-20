@@ -1,6 +1,6 @@
 # Proof B — Execution
 
-状态：`TECHNICAL READY — REAL WORKBUDDY ACCEPTANCE PENDING`
+状态：`PASS`
 
 进入条件：Proof A 明确 `PASS`，且用户批准继续。
 
@@ -31,12 +31,26 @@ Proof A 的层级修正已在独立提交 `637c7b4` 完成，并保留原始 Pro
 
 这些是 Agent Bridge / Persistence 的真实技术证据，但不把测试进程冒充 WorkBuddy，也不把本地测试进程计为最终 Proof B 通过。
 
+## 真实 WorkBuddy 验收结果
+
+WorkBuddy 已通过同一套 My Whiteboard MCP 完成真实 Hosted Execution：
+
+- Workspace：`v3 → v8`；Delta 共 6 个有序事件。
+- Agent：`proof-b-external-host`，WorkBuddy，Entity Version `2`。
+- Change：`change-proof-b-health-endpoint`，最终 status `completed`，Entity Version `3`。
+- Execution：`execution-eb0cbe4e`，adapter `hosted`，最终 status `completed`，Entity Version `3`。
+- lifecycle：`queued → claimed → started → running → completed`。
+- `repoBefore.revision` 与基线一致：`3550be483b271199f6a71f2a1b2407849cb34880`。
+- MCP 捕获的 `repoChange.files` 恰为 `src/server.js`、`test/server.test.js`；revision 未被 WorkBuddy 提交，修改保持在工作区供独立核验。
+- Codex 独立读取 Git diff，确认 `/api/status` 未变更、`/api/health` 与测试真实存在；`npm test` 为 2/2，`npm run typecheck` 通过。
+- MCP Delta 顺序为：`agent.updated(v4)` → `execution.created(v5)` + `change.updated(v5)` → `execution.updated(running,v6)` → `execution.updated(completed,v7)` → `change.updated(completed,v8)`。
+
 ## 外部 Agent 验收边界
 
-本机当前没有可由 Codex 进程直接启动的 `workbuddy` / `workbuddy-cli` 可执行入口；WorkBuddy 是独立的交互式客户端。因而当前状态明确为 `TECHNICAL READY — REAL WORKBUDDY ACCEPTANCE PENDING`，不是 `PASS`：还必须由真实 WorkBuddy 会话通过已信任的 MCP 连接消费一个 approved Change，调用 `execution_claim`，实际修改真实项目，再调用 `execution_report` 报告生命周期，最后由 Codex 通过 `execution_get` / `workspace_get_changes` 核对 lifecycle 与 Repo change。
+本机没有可由 Codex 进程直接启动的 `workbuddy` / `workbuddy-cli` 入口；本次验收由用户单独打开的真实 WorkBuddy 完成。WorkBuddy 通过已信任 MCP 连接调用 `agent_sync`、`change_get`、`execution_claim`、`execution_report`、`execution_get` 和 `workspace_get_changes`，未触碰 Core，也未由 Codex 模拟。
 
 不以复制 Prompt、直接调用 Core、fake provider 或测试脚本替代这一步。最低兼容路径是让 WorkBuddy 在其 MCP Host 中调用 `execution_claim` / `execution_report`；若 WorkBuddy 不暴露该能力，则记录为 Adapter 能力缺口，而不是修改 Core 假装成功。
 
 ## 当前结论
 
-Core、Persistence、MCP 边界、真实进程 Adapter 和 Hosted Execution 接管 API 的技术证明通过；状态为 `TECHNICAL READY — REAL WORKBUDDY ACCEPTANCE PENDING`。Proof C 不提前开始。
+Core、Persistence、MCP 边界、真实进程 Adapter、Hosted Execution 接管 API 以及真实 WorkBuddy Repo 修改证据均通过，Proof B 记为 `PASS`。Proof C 仍未开始。

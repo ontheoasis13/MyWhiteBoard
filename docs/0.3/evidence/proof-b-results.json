@@ -1,7 +1,7 @@
 {
   "proof": "B",
   "title": "Execution",
-  "status": "in_progress",
+  "status": "pass",
   "proofACommit": "cd26a62c0f3a3b988997e9ba73a4f88b12b7620b",
   "hierarchyCommit": "637c7b4",
   "toolCount": 40,
@@ -11,7 +11,11 @@
     "workspaceVersion": 3,
     "agentId": "proof-b-external-host",
     "changeId": "change-proof-b-health-endpoint",
-    "changeStatus": "approved"
+    "changeStatus": "completed",
+    "executionId": "execution-eb0cbe4e",
+    "executionStatus": "completed",
+    "finalWorkspaceVersion": 8,
+    "deltaEventCountSinceVersion3": 6
   },
   "bridge": {
     "changeCollection": "changes",
@@ -33,8 +37,14 @@
   },
   "externalAcceptance": {
     "client": "WorkBuddy",
-    "status": "pending",
-    "reason": "No WorkBuddy CLI or callable host execution surface is exposed to this Codex process; a real WorkBuddy session must call execution_claim/report and provide the final Agent lifecycle signal and repo modification evidence.",
+    "status": "pass",
+    "reason": "Real WorkBuddy completed the approved Change through My Whiteboard MCP; Codex independently verified the same Workspace Delta and Git working tree.",
+    "executionId": "execution-eb0cbe4e",
+    "workspaceVersion": 8,
+    "deltaEventCount": 6,
+    "repoFiles": ["src/server.js", "test/server.test.js"],
+    "repoBeforeRevision": "3550be483b271199f6a71f1a2b2407849cb34880",
+    "repoAfterRevision": "3550be483b271199f6a71f1a2b2407849cb34880",
     "mustNotCount": ["copied prompt", "fake provider", "mock agent", "direct Core call"]
   }
 }
