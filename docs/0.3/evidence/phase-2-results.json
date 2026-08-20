@@ -1,0 +1,38 @@
+{
+  "phase": "2",
+  "title": "Product-first UI",
+  "status": "pass",
+  "defaultView": "Product View",
+  "locale": "zh-CN",
+  "projectionSource": "ProjectModel.productMapProjection",
+  "projectA": {
+    "name": "My Whiteboard",
+    "root": "plugins/my-whiteboard",
+    "一级产品能力": 7,
+    "features": 20,
+    "evidence": 388,
+    "opening": "pass",
+    "freshnessBanner": "pass"
+  },
+  "projectB": {
+    "name": "product-grounding-alias-app",
+    "root": "plugins/my-whiteboard/tests/fixtures/product-grounding-alias-app",
+    "opening": "pass",
+    "projection": "pass"
+  },
+  "uiChecks": {
+    "featureInspector": "pass",
+    "search": "pass",
+    "focus": "pass",
+    "breadcrumb": "pass",
+    "partialFailedOpening": "implemented",
+    "humanLayoutPersistence": "pass",
+    "humanCorrectionRestore": "pass",
+    "boardView02Entry": "pass"
+  },
+  "tests": "56/56 passed",
+  "typecheck": "pass",
+  "build": "pass",
+  "mcpSmoke": "pass (42 tools)",
+  "phase3Started": false
+}

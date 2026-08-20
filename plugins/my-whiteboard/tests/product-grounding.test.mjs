@@ -128,6 +128,35 @@ test("exposes Product Grounding through the Agent-neutral MCP boundary", async (
   assert.deepEqual(current.structuredContent.model.evidence, {});
 });
 
+test("Product Group and Hidden Feature remain separate from Feature Actionability", async () => {
+  const root = await fixtureCopy();
+  const scanned = await scanProductGrounding(root, { now: "2026-08-20T05:10:00.000Z" });
+  const feature = scanned.model.features["feature-billing"];
+  const originalActionability = feature.actionability;
+  const hidden = await correctProductFeature(root, {
+    featureId: feature.id,
+    expectedVersion: feature.version,
+    patch: { hidden: true },
+    reason: "暂时隐藏产品地图节点",
+    actor: { id: "product-owner", displayName: "产品负责人", client: "human" },
+  });
+  assert.equal(hidden.feature.hidden, true);
+  assert.equal(hidden.feature.actionability, originalActionability);
+  assert.ok(hidden.model.productMapProjection.hierarchy.groups.every((group) => group.nodeKind === "group"));
+  assert.equal(hidden.model.productMapProjection.features.some((item) => item.id === feature.id), false);
+
+  const restored = await correctProductFeature(root, {
+    featureId: feature.id,
+    expectedVersion: hidden.feature.version,
+    patch: { hidden: false },
+    reason: "恢复产品地图节点",
+    actor: { id: "product-owner", displayName: "产品负责人", client: "human" },
+  });
+  assert.equal(restored.feature.hidden, false);
+  assert.equal(restored.feature.actionability, originalActionability);
+  assert.ok(restored.model.productMapProjection.features.some((item) => item.id === feature.id && item.nodeKind === "feature"));
+});
+
 test("grounds the real My Whiteboard TS/JS project without generated asset noise", async () => {
   const pluginRoot = path.resolve(testDirectory, "..");
   const result = await scanProductGrounding(pluginRoot, { persist: false, maxFiles: 1000, now: "2026-08-20T05:03:00.000Z" });
