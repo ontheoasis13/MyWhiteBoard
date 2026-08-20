@@ -4,11 +4,14 @@ import os from "node:os";
 import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { appendFile, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import {
+  claimHostedExecution,
+  connectAgent,
   createChange,
   createProjectWorkspace,
   getExecution,
+  reportHostedExecution,
   resumeExecution,
   startExecution,
   stopExecution,
@@ -82,4 +85,22 @@ test("stop persists interrupted state and resume creates a linked Execution", as
   assert.equal(resumed.execution.parentExecutionId, interrupted.id);
   await stopExecution(projectRoot, resumed.execution.id, { id: "human", client: "test" });
   await waitFor(projectRoot, resumed.execution.id, (execution) => execution.status === "interrupted");
+});
+
+test("hosted Agent can claim and report an approved Change through the neutral API", async () => {
+  const projectRoot = await gitProject();
+  await connectAgent(projectRoot, { id: "external-host", displayName: "External MCP Host", client: "external-mcp", capabilities: ["execution"] });
+  const { change } = await createChange(projectRoot, { id: "change-hosted", title: "Hosted change", status: "approved", contract: { files: ["README.md"], operation: "append" }, acceptanceCriteria: ["README contains hosted-change"] }, { id: "human", client: "test" });
+  const claimed = await claimHostedExecution(projectRoot, { changeId: change.id, agentId: "external-host", actor: { id: "external-host", client: "external-mcp" } });
+  assert.equal(claimed.execution.status, "running");
+  assert.equal(claimed.execution.changeId, change.id);
+  await appendFile(path.join(projectRoot, "README.md"), "hosted-change\n", "utf8");
+  const reported = await reportHostedExecution(projectRoot, { executionId: claimed.execution.id, agentId: "external-host", status: "completed", output: { summary: "Host completed" }, result: { accepted: true }, actor: { id: "external-host", client: "external-mcp" } });
+  assert.equal(reported.execution.status, "completed");
+  assert.equal(reported.change.status, "completed");
+  assert.equal(reported.execution.repoChange.files.includes("README.md"), true);
+  await assert.rejects(
+    reportHostedExecution(projectRoot, { executionId: claimed.execution.id, agentId: "other-agent", status: "completed" }),
+    /claimed Agent/,
+  );
 });

@@ -13,9 +13,11 @@ import {
   createProjectWorkspace,
   correctProductFeature,
   createChange,
+  claimHostedExecution,
   executionCapabilities,
   getChange,
   getExecution,
+  reportHostedExecution,
   resumeExecution,
   startExecution,
   stopExecution,
@@ -82,6 +84,7 @@ const handoffSchema = { type: "object", properties: { id: { type: "string" }, ti
 const messageSchema = { type: "object", properties: { id: { type: "string" }, fromAgentId: { type: "string" }, toAgentId: { type: ["string", "null"] }, channel: { type: "string" }, kind: { type: "string", enum: ["update", "request", "response", "conflict", "system"] }, body: { type: "string" }, relatedEntityRefs: { type: "array", items: { type: "object", properties: { collection: { type: "string" }, id: { type: "string" } }, required: ["collection", "id"], additionalProperties: false } }, readBy: { type: "array", items: { type: "string" } } }, required: ["fromAgentId", "body"], additionalProperties: false };
 const changeEntitySchema = { type: "object", properties: { id: { type: "string" }, title: { type: "string" }, featureId: { type: ["string", "null"] }, intent: { type: "string" }, status: { type: "string", enum: ["draft", "approved", "executing", "completed", "interrupted", "failed", "cancelled"] }, contract: { type: "object" }, desiredState: { type: "object" }, acceptanceCriteria: { type: "array", items: { type: "string" } }, constraints: { type: "array", items: { type: "string" } }, relatedEntityRefs: { type: "array", items: { type: "object" } } }, additionalProperties: true };
 const executionAdapterSchema = { type: "object", properties: { kind: { type: "string", enum: ["process"] }, adapterId: { type: "string" }, command: { type: "string" }, args: { type: "array", items: { type: "string" } }, env: { type: "object" } }, required: ["command"], additionalProperties: false };
+const hostedExecutionReportStatusSchema = { type: "string", enum: ["running", "interrupted", "failed", "completed", "cancelled"] };
 
 export const workspaceTools = [
   {
@@ -335,6 +338,20 @@ export const workspaceTools = [
     annotations: mutating,
   },
   {
+    name: "execution_claim",
+    title: "Claim Hosted Agent Execution",
+    description: "Claim and start an approved Change for an already-running external MCP Agent Host. The Host performs the Repo work and reports lifecycle through execution_report.",
+    inputSchema: { type: "object", properties: { project_root: { type: "string" }, change_id: { type: "string" }, agent_id: { type: "string" }, execution_id: { type: "string" }, actor: actorSchema }, required: ["project_root", "change_id", "agent_id"], additionalProperties: false },
+    annotations: mutating,
+  },
+  {
+    name: "execution_report",
+    title: "Report Hosted Agent Execution",
+    description: "Persist running, interrupted, failed, or completed lifecycle and result data from an external Agent Host, including Repo evidence captured at the MCP boundary.",
+    inputSchema: { type: "object", properties: { project_root: { type: "string" }, execution_id: { type: "string" }, agent_id: { type: "string" }, status: hostedExecutionReportStatusSchema, output: { type: "object" }, result: { type: "object" }, error: { type: "object" }, metadata: { type: "object" }, actor: actorSchema }, required: ["project_root", "execution_id", "agent_id", "status"], additionalProperties: false },
+    annotations: mutating,
+  },
+  {
     name: "execution_get",
     title: "Read Agent Execution",
     description: "Read durable Execution lifecycle, Change linkage, output, errors, and repository change evidence.",
@@ -523,6 +540,14 @@ export async function callWorkspaceTool(name, args, httpService) {
   if (name === "execution_start") {
     const result = await startExecution(args.project_root, { changeId: args.change_id, agentId: args.agent_id, adapter: args.adapter, actor: args.actor });
     return content(`Execution “${result.execution.id}” is ${result.execution.status}.`, result);
+  }
+  if (name === "execution_claim") {
+    const result = await claimHostedExecution(args.project_root, { changeId: args.change_id, agentId: args.agent_id, executionId: args.execution_id, actor: args.actor });
+    return content(`Hosted Execution “${result.execution.id}” claimed by ${result.execution.agentId}.`, result);
+  }
+  if (name === "execution_report") {
+    const result = await reportHostedExecution(args.project_root, { executionId: args.execution_id, agentId: args.agent_id, status: args.status, output: args.output, result: args.result, error: args.error, metadata: args.metadata, actor: args.actor });
+    return content(`Hosted Execution “${result.execution.id}” is ${result.execution.status}.`, result);
   }
   if (name === "execution_get") {
     const result = await getExecution(args.project_root, args.execution_id);

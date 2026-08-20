@@ -47,7 +47,7 @@ try {
   const initialized = await request("initialize", { protocolVersion: "2025-11-25", capabilities: {} });
   assert(initialized.result?.serverInfo?.name === "My Whiteboard Workspace", "initialize failed");
   const listed = await request("tools/list");
-  assert(listed.result.tools.length === 38, "unexpected workspace tool count");
+  assert(listed.result.tools.length === 40, "unexpected workspace tool count");
   assert(listed.result.tools.every((tool) => !tool._meta?.["openai/outputTemplate"]), "iframe output template remains");
   const project = await request("tools/call", { name: "project_create", arguments: { project_root: projectRoot, name: "Smoke Project", actor: { id: "codex", client: "codex" } } });
   assert(project.result.structuredContent.workspaceVersion === 1, "project creation failed");
@@ -116,6 +116,14 @@ const synchronized = await request("tools/call", {
     execution = currentExecution.result.structuredContent.execution;
   }
   assert(execution.status === "completed", "Execution did not complete");
+  const hostedChange = await request("tools/call", { name: "change_create", arguments: { project_root: projectRoot, change: { id: "smoke-hosted-change", title: "Hosted Smoke Change", intent: "Validate external host lifecycle", status: "approved", contract: { files: ["hosted-output.txt"] }, acceptanceCriteria: ["hosted output exists"] }, actor: { id: "human", client: "smoke" } } });
+  assert(hostedChange.result.structuredContent.change.status === "approved", "Hosted Change Contract creation failed");
+  const claimed = await request("tools/call", { name: "execution_claim", arguments: { project_root: projectRoot, change_id: "smoke-hosted-change", agent_id: "claude", actor: { id: "claude", client: "external-mcp" } } });
+  assert(claimed.result.structuredContent.execution.status === "running", "Hosted execution claim failed");
+  await writeFile(path.join(projectRoot, "hosted-output.txt"), claimed.result.structuredContent.execution.id, "utf8");
+  const reported = await request("tools/call", { name: "execution_report", arguments: { project_root: projectRoot, execution_id: claimed.result.structuredContent.execution.id, agent_id: "claude", status: "completed", output: { summary: "External host smoke completed" }, result: { accepted: true }, actor: { id: "claude", client: "external-mcp" } } });
+  assert(reported.result.structuredContent.execution.status === "completed", "Hosted execution report failed");
+  assert(reported.result.structuredContent.execution.repoAfter && reported.result.structuredContent.execution.repoChange, "Hosted repo evidence missing");
   const delta = await request("tools/call", { name: "workspace_get_changes", arguments: { project_root: projectRoot, since_version: 1 } });
   assert(delta.result.structuredContent.events.length >= 3, "workspace delta failed");
   const deltaText = parseTextFallback(delta.result);

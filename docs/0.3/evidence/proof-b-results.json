@@ -4,20 +4,21 @@
   "status": "in_progress",
   "proofACommit": "cd26a62c0f3a3b988997e9ba73a4f88b12b7620b",
   "hierarchyCommit": "637c7b4",
-  "toolCount": 38,
+  "toolCount": 40,
   "bridge": {
     "changeCollection": "changes",
     "executionCollection": "executions",
     "adapter": "ProcessAgentExecutionAdapter",
     "lifecycle": ["queued", "running", "completed", "interrupted", "failed"],
-    "controls": ["start", "status", "stop", "resume"],
+    "controls": ["start", "status", "stop", "resume", "claim", "report"],
     "repoEvidence": ["repoBefore", "repoAfter", "repoChange.files", "revisionBefore", "revisionAfter"]
   },
   "localTechnicalEvidence": {
     "realProcessRepoModification": "pass",
     "stopAndResumeLinkage": "pass",
     "mcpJsonRpcExecutionSmoke": "pass",
-    "tests": "41/41",
+    "hostedClaimReportApi": "pass",
+    "tests": "42/42",
     "typecheck": "pass",
     "build": "pass",
     "smoke": "pass"
@@ -25,7 +26,7 @@
   "externalAcceptance": {
     "client": "WorkBuddy",
     "status": "pending",
-    "reason": "No WorkBuddy CLI or callable host execution surface is exposed to this Codex process; a real WorkBuddy session must provide the final Agent Adapter signal and repo modification evidence.",
+    "reason": "No WorkBuddy CLI or callable host execution surface is exposed to this Codex process; a real WorkBuddy session must call execution_claim/report and provide the final Agent lifecycle signal and repo modification evidence.",
     "mustNotCount": ["copied prompt", "fake provider", "mock agent", "direct Core call"]
   }
 }

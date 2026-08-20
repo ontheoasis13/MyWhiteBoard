@@ -178,6 +178,88 @@ export async function executionCapabilities(config) {
   return { capabilities: await createExecutionAdapter(config).capabilities() };
 }
 
+/**
+ * Claim an approved Change for an already-running external Agent Host. The
+ * Host owns the actual code execution; Core owns the durable identity and
+ * lifecycle record. No client name is stored or inspected here.
+ */
+export async function claimHostedExecution(projectRoot, options = {}) {
+  const actor = options.actor || { id: options.agentId || "agent", client: "unknown" };
+  const workspace = await readWorkspace(projectRoot);
+  const change = requireChange(workspace, String(options.changeId || ""));
+  const agentId = String(options.agentId || actor.id || "");
+  const agent = workspace.entities.agents?.[agentId];
+  if (!agent) throw new ValidationError("Execution Agent must be connected before claiming a Change.", { agentId });
+  if (change.status !== "approved") throw new ValidationError("Only an approved Change can be claimed for hosted execution.", { changeId: change.id, status: change.status });
+  const active = Object.values(workspace.entities.executions || {}).find((execution) => execution.changeId === change.id && ["queued", "running"].includes(execution.status));
+  if (active) throw new ValidationError("Change already has an active Execution.", { changeId: change.id, executionId: active.id });
+  const executionId = String(options.executionId || `execution-${randomUUID().slice(0, 8)}`);
+  const repoBefore = await repoSnapshot(projectRoot);
+  const execution = {
+    id: executionId,
+    title: `Hosted Execution: ${change.title}`,
+    changeId: change.id,
+    agentId,
+    adapterId: "hosted",
+    status: "running",
+    input: { changeId: change.id, contract: clone(change), adapter: { kind: "hosted", adapterId: "hosted" } },
+    output: {},
+    error: null,
+    lifecycle: [
+      { type: "queued", at: timestamp() },
+      { type: "claimed", at: timestamp(), agentId },
+      { type: "started", at: timestamp(), agentId },
+    ],
+    repoBefore,
+    repoAfter: null,
+    repoChange: null,
+    parentExecutionId: options.parentExecutionId || null,
+  };
+  const result = await applyWorkspaceTransaction(projectRoot, { actor, operations: [
+    { type: "entity.create", collection: "executions", entity: execution },
+    { type: "entity.update", collection: "changes", id: change.id, expectedVersion: change.version, patch: { status: "executing" } },
+  ] });
+  const current = await readWorkspace(projectRoot);
+  return { ...result, execution: current.entities.executions[executionId], change: current.entities.changes[change.id] };
+}
+
+export async function reportHostedExecution(projectRoot, options = {}) {
+  const actor = options.actor || { id: options.agentId || "agent", client: "unknown" };
+  const workspace = await readWorkspace(projectRoot);
+  const current = requireExecution(workspace, String(options.executionId || ""));
+  const agentId = String(options.agentId || actor.id || "");
+  if (current.agentId !== agentId) throw new ValidationError("Only the claimed Agent can report an Execution.", { executionId: current.id, expectedAgentId: current.agentId, agentId });
+  const status = String(options.status || "");
+  if (!["running", "interrupted", "failed", "completed", "cancelled"].includes(status)) throw new ValidationError(`Invalid hosted Execution report status: ${status}`);
+  if (!["queued", "running"].includes(current.status)) throw new ValidationError("Execution is already terminal.", { executionId: current.id, status: current.status });
+  const terminal = status !== "running";
+  const repoAfter = terminal ? await repoSnapshot(projectRoot) : current.repoAfter;
+  const patch = {
+    status,
+    output: options.output && typeof options.output === "object" ? clone(options.output) : current.output,
+    result: options.result && typeof options.result === "object" ? clone(options.result) : current.result || {},
+    error: options.error && typeof options.error === "object" ? clone(options.error) : status === "failed" ? { message: "Hosted Agent reported failure." } : null,
+    lifecycle: appendLifecycle(current, status, { agentId, ...(options.metadata && typeof options.metadata === "object" ? clone(options.metadata) : {}) }),
+    ...(terminal ? {
+      repoAfter,
+      repoChange: {
+        files: [...new Set([...(current.repoBefore?.files || []), ...(repoAfter?.files || [])])],
+        revisionBefore: current.repoBefore?.revision || null,
+        revisionAfter: repoAfter?.revision || null,
+      },
+      endedAt: timestamp(),
+    } : {}),
+  };
+  const saved = await updateEntity(projectRoot, "executions", current.id, patch, actor);
+  if (terminal) {
+    const latest = await readWorkspace(projectRoot);
+    const change = latest.entities.changes[current.changeId];
+    if (change && change.status === "executing") await updateEntity(projectRoot, "changes", change.id, { status }, actor);
+  }
+  const latest = await readWorkspace(projectRoot);
+  return { ...saved, execution: latest.entities.executions[current.id], change: latest.entities.changes[current.changeId] };
+}
+
 async function finishExecution(projectRoot, executionId, result, actor) {
   const current = (await getExecution(projectRoot, executionId)).execution;
   if (!["queued", "running"].includes(current.status)) return current;
