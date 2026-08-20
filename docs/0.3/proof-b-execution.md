@@ -40,7 +40,7 @@ WorkBuddy 已通过同一套 My Whiteboard MCP 完成真实 Hosted Execution：
 - Change：`change-proof-b-health-endpoint`，最终 status `completed`，Entity Version `3`。
 - Execution：`execution-eb0cbe4e`，adapter `hosted`，最终 status `completed`，Entity Version `3`。
 - lifecycle：`queued → claimed → started → running → completed`。
-- `repoBefore.revision` 与基线一致：`3550be483b271199f6a71f2a1b2407849cb34880`。
+- `repoBefore.revision` 与基线一致：`3550be483b271199f6a71f1a2b2407849cb34880`。
 - MCP 捕获的 `repoChange.files` 恰为 `src/server.js`、`test/server.test.js`；revision 未被 WorkBuddy 提交，修改保持在工作区供独立核验。
 - Codex 独立读取 Git diff，确认 `/api/status` 未变更、`/api/health` 与测试真实存在；`npm test` 为 2/2，`npm run typecheck` 通过。
 - MCP Delta 顺序为：`agent.updated(v4)` → `execution.created(v5)` + `change.updated(v5)` → `execution.updated(running,v6)` → `execution.updated(completed,v7)` → `change.updated(completed,v8)`。
