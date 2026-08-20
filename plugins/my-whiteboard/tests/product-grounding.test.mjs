@@ -56,11 +56,14 @@ test("grounds Features to deterministic Evidence and preserves Human Intent acro
   assert.ok(feature.groundingRefs.every((id) => first.model.evidence[id]));
   assert.ok(feature.groundingRefs.some((id) => first.model.evidence[id].certainty === "confirmed"));
   assert.ok(feature.groundingRefs.some((id) => first.model.evidence[id].type === "semantic_inference" && first.model.evidence[id].certainty === "possible"));
+  assert.equal(first.model.productHierarchy.levels, 2);
+  assert.ok(first.model.productHierarchy.groups["group-project-delivery"]);
+  const originalEvidenceIds = Object.keys(first.model.evidence);
 
   const corrected = await correctProductFeature(root, {
     featureId: feature.id,
     expectedVersion: feature.version,
-    patch: { name: "订阅与账单", description: "用户管理订阅方案与账单状态。" },
+    patch: { name: "订阅与账单", description: "用户管理订阅方案与账单状态。", groupId: "group-project-knowledge", parentFeatureId: "feature-project" },
     reason: "产品负责人确认该能力的用户语言",
     actor: { id: "product-owner", displayName: "产品负责人", client: "human" },
     now: "2026-08-20T05:01:00.000Z",
@@ -82,6 +85,11 @@ test("grounds Features to deterministic Evidence and preserves Human Intent acro
   assert.equal(after.name, "订阅与账单");
   assert.equal(after.description, "用户管理订阅方案与账单状态。");
   assert.equal(after.version, 2);
+  assert.equal(after.groupId, "group-project-knowledge");
+  assert.equal(after.parentFeatureId, "feature-project");
+  assert.ok(rescanned.model.features["feature-project"].childFeatureIds.includes("feature-billing"));
+  assert.ok(rescanned.model.productHierarchy.groups["group-project-knowledge"].featureIds.includes("feature-billing"));
+  assert.ok(originalEvidenceIds.every((id) => rescanned.model.evidence[id]), "Grounded Evidence was deleted during hierarchy rescan");
   assert.ok(after.groundingRefs.some((id) => rescanned.model.evidence[id].type === "human_confirmation"));
   assert.ok(after.groundingRefs.some((id) => rescanned.model.evidence[id].observedAt === "2026-08-20T05:02:00.000Z"));
   assert.equal((await readProductGrounding(root)).features[feature.id].name, "订阅与账单");
@@ -100,7 +108,7 @@ test("exposes Product Grounding through the Agent-neutral MCP boundary", async (
     project_root: root,
     feature_id: billing.id,
     expected_version: billing.version,
-    patch: { name: "订阅中心" },
+    patch: { name: "订阅中心", groupId: "group-project-knowledge", parentFeatureId: "feature-project" },
     reason: "用户确认",
     actor: { id: "human", displayName: "用户", client: "human" },
   });
@@ -108,6 +116,7 @@ test("exposes Product Grounding through the Agent-neutral MCP boundary", async (
 
   const current = await callWorkspaceTool("product_grounding_get", { project_root: root, include_evidence: false });
   assert.equal(current.structuredContent.productMap.features.find((item) => item.id === billing.id).name, "订阅中心");
+  assert.equal(current.structuredContent.productMap.features.find((item) => item.id === billing.id).groupId, "group-project-knowledge");
   assert.deepEqual(current.structuredContent.model.evidence, {});
 });
 
@@ -124,6 +133,11 @@ test("grounds the real My Whiteboard TS/JS project without generated asset noise
   const board = result.model.features["feature-board"];
   assert.ok(board.groundingRefs.some((id) => result.model.evidence[id]?.target?.startsWith("mcp:board_")));
   assert.ok(productMap.features.length >= 10);
+  assert.equal(productMap.hierarchy.levels, 2);
+  assert.ok(productMap.hierarchy.groups.length >= 5 && productMap.hierarchy.groups.length <= 7);
+  assert.ok(productMap.hierarchy.groups.some((group) => group.id === "group-ai-collaboration" && group.featureIds.includes("feature-handoff") && group.featureIds.includes("feature-message") && group.featureIds.includes("feature-selection")));
+  assert.ok(productMap.hierarchy.groups.some((group) => group.id === "group-project-knowledge" && group.featureIds.includes("feature-context") && group.featureIds.includes("feature-decision") && group.featureIds.includes("feature-artifact")));
+  assert.ok(productMap.hierarchy.groups.some((group) => group.id === "group-compatibility-maintenance" && group.featureIds.includes("feature-legacy")));
   assert.ok(productMap.features.every((feature) => feature.groundingRefs.every((id) => result.model.evidence[id])));
 
   const packageSource = await readFile(path.join(pluginRoot, "package.json"), "utf8");

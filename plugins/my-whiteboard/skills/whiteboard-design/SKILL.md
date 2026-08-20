@@ -37,7 +37,8 @@ Build editable semantic structure, not a flattened picture. `Semantic Board Stat
 - Use `product_grounding_scan` for a TS/JS Web project when the user needs a product-facing map instead of a file/module graph. It deterministically observes files, imports, routes, APIs, symbols, tests, and database definitions before inferring Features.
 - Treat Evidence with `certainty: confirmed` as Observed Code Truth. Treat `semantic_inference` with `certainty: possible` as Product Inference; never present it as confirmed human intent.
 - Use `product_grounding_get` to read the current Product Map and follow a Feature's `groundingRefs` back to file, line, repository revision, and observation details.
-- Use `product_feature_correct` only for an explicit human correction. Send the Feature's current `expected_version`; on `VERSION_CONFLICT`, re-read before deciding whether to retry.
+- Product Map hierarchy is a two-level Product Inference view: first-level groups contain level-two Features. Use the group's `inferenceRefs` to explain the grouping; never present a group as Observed Code Truth.
+- Use `product_feature_correct` only for an explicit human correction. Send the Feature's current `expected_version`; `groupId` and `parentFeatureId` are durable Human Intent fields. On `VERSION_CONFLICT`, re-read before deciding whether to retry.
 - Human Intent corrections are stored separately from observations and must survive MCP restart and rescan. Never edit Evidence to make an inference appear confirmed.
 - Product Grounding is the Proof A control-loop foundation. Do not claim execution or verification merely because a Feature is grounded.
 

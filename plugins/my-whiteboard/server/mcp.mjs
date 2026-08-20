@@ -288,7 +288,7 @@ export const workspaceTools = [
         project_root: { type: "string" },
         feature_id: { type: "string" },
         expected_version: { type: "integer", minimum: 1 },
-        patch: { type: "object", properties: { name: { type: "string" }, description: { type: "string" }, parentFeatureId: { oneOf: [{ type: "string" }, { type: "null" }] }, productState: { type: "string" }, actionability: { type: "string" }, hidden: { type: "boolean" } }, additionalProperties: false },
+        patch: { type: "object", properties: { name: { type: "string" }, description: { type: "string" }, parentFeatureId: { oneOf: [{ type: "string" }, { type: "null" }] }, groupId: { type: "string" }, productState: { type: "string" }, actionability: { type: "string" }, hidden: { type: "boolean" } }, additionalProperties: false },
         reason: { type: "string" },
         actor: actorSchema,
       },

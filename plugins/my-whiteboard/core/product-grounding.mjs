@@ -10,7 +10,7 @@ import { slug } from "./schema.mjs";
 const execFileAsync = promisify(execFile);
 const MODEL_SCHEMA_VERSION = 1;
 const CERTAINTIES = new Set(["confirmed", "possible", "unknown"]);
-const ALLOWED_CORRECTION_FIELDS = new Set(["name", "description", "parentFeatureId", "productState", "actionability", "hidden"]);
+const ALLOWED_CORRECTION_FIELDS = new Set(["name", "description", "parentFeatureId", "groupId", "productState", "actionability", "hidden"]);
 
 const CONCEPT_LABELS = Object.freeze({
   "agent": "智能体协作",
@@ -34,6 +34,34 @@ const CONCEPT_LABELS = Object.freeze({
   "settings": "设置",
   "task": "任务管理",
   "workspace": "工作区",
+});
+
+const PRODUCT_GROUPS = Object.freeze([
+  { id: "group-workspace-map", name: "工作区与地图", description: "用户进入、浏览和理解项目的主要工作面。" },
+  { id: "group-project-knowledge", name: "项目知识", description: "支撑项目理解与决策的上下文、产物和知识记录。" },
+  { id: "group-project-delivery", name: "项目推进", description: "把项目目标转化为可跟踪工作的项目与任务能力。" },
+  { id: "group-ai-collaboration", name: "AI 协作", description: "智能体身份、交接、消息和聚焦上下文等协作能力。" },
+  { id: "group-sync-extensions", name: "同步与扩展", description: "跨环境同步和可选扩展能力。" },
+  { id: "group-compatibility-maintenance", name: "兼容与维护", description: "旧格式迁移和维护性能力，不作为核心一级体验。" },
+  { id: "group-other", name: "其他能力", description: "尚未有稳定产品分组的能力，等待人工确认。" },
+]);
+
+const FEATURE_GROUPS = Object.freeze({
+  "feature-agent": "group-ai-collaboration",
+  "feature-artifact": "group-project-knowledge",
+  "feature-board": "group-workspace-map",
+  "feature-cloud": "group-sync-extensions",
+  "feature-code-board": "group-workspace-map",
+  "feature-context": "group-project-knowledge",
+  "feature-decision": "group-project-knowledge",
+  "feature-handoff": "group-ai-collaboration",
+  "feature-legacy": "group-compatibility-maintenance",
+  "feature-message": "group-ai-collaboration",
+  "feature-product-map": "group-workspace-map",
+  "feature-project": "group-project-delivery",
+  "feature-selection": "group-ai-collaboration",
+  "feature-task": "group-project-delivery",
+  "feature-workspace": "group-workspace-map",
 });
 
 function productModelPath(projectRoot) {
@@ -72,6 +100,10 @@ function operationConcept(operation) {
   if (operation.startsWith("code_board_")) return "code-board";
   if (operation.startsWith("product_grounding_") || operation.startsWith("product_feature_")) return "product-map";
   return normalizedConcept(operation.split("_")[0]);
+}
+
+function defaultGroupId(featureId) {
+  return FEATURE_GROUPS[featureId] || "group-other";
 }
 
 function evidenceId(type, source, target, line = null) {
@@ -289,6 +321,7 @@ function inferFeatures(evidence, base) {
       description: `由 ${directEvidence.length} 个可追溯产品信号支撑的能力。`,
       parentFeatureId: null,
       childFeatureIds: [],
+      groupId: defaultGroupId(featureId),
       productState: "observed",
       groundingRefs: [...new Set([...directRefs, ...technicalRefs, inferenceId])],
       humanIntent: null,
@@ -298,6 +331,68 @@ function inferFeatures(evidence, base) {
     };
   }
   return features;
+}
+
+function buildProductHierarchy(features, evidence, previousHierarchy, base) {
+  const groups = {};
+  for (const definition of PRODUCT_GROUPS) {
+    const previous = previousHierarchy?.groups?.[definition.id];
+    groups[definition.id] = {
+      id: definition.id,
+      entityType: "product-group",
+      level: 1,
+      parentGroupId: null,
+      version: previous?.version || 1,
+      name: previous?.name || definition.name,
+      description: previous?.description || definition.description,
+      featureIds: [],
+      inferenceRefs: [],
+      humanIntent: previous?.humanIntent || null,
+    };
+  }
+  for (const feature of Object.values(features)) {
+    const groupId = feature.groupId || defaultGroupId(feature.id);
+    if (!groups[groupId]) {
+      groups[groupId] = {
+        id: groupId,
+        entityType: "product-group",
+        level: 1,
+        parentGroupId: null,
+        version: previousHierarchy?.groups?.[groupId]?.version || 1,
+        name: previousHierarchy?.groups?.[groupId]?.name || "自定义产品分组",
+        description: previousHierarchy?.groups?.[groupId]?.description || "由人工意图创建的产品分组。",
+        featureIds: [],
+        inferenceRefs: [],
+        humanIntent: previousHierarchy?.groups?.[groupId]?.humanIntent || null,
+      };
+    }
+    feature.groupId = groupId;
+    feature.level = 2;
+    groups[groupId].featureIds.push(feature.id);
+  }
+  for (const feature of Object.values(features)) feature.childFeatureIds = [];
+  for (const feature of Object.values(features)) {
+    if (feature.parentFeatureId && features[feature.parentFeatureId]) features[feature.parentFeatureId].childFeatureIds.push(feature.id);
+  }
+  for (const group of Object.values(groups)) {
+    group.featureIds.sort();
+    if (!group.featureIds.length) continue;
+    const inferenceId = addEvidence(evidence, {
+      type: "semantic_inference",
+      source: "product-hierarchy-v1",
+      target: `group:${group.id}`,
+      ...base,
+      certainty: "possible",
+      details: { observationKind: "product_grouping", basedOnFeatureIds: [...group.featureIds] },
+    });
+    group.inferenceRefs = [inferenceId];
+  }
+  return {
+    version: Number(previousHierarchy?.version || 0) + 1,
+    levels: 2,
+    roots: Object.values(groups).filter((group) => group.featureIds.length).map((group) => group.id),
+    groups,
+  };
 }
 
 export async function observeProductGrounding(projectRoot, options = {}) {
@@ -351,6 +446,7 @@ export async function scanProductGrounding(projectRoot, options = {}) {
   const features = inferFeatures(evidence, base);
   const humanIntent = previous?.humanIntent || { featureCorrections: {} };
   applyHumanIntent(features, evidence, humanIntent, previous, base);
+  const productHierarchy = buildProductHierarchy(features, evidence, previous?.productHierarchy, base);
   const model = {
     schemaVersion: MODEL_SCHEMA_VERSION,
     modelType: "project-model-proof-a",
@@ -371,6 +467,7 @@ export async function scanProductGrounding(projectRoot, options = {}) {
     features,
     evidence: Object.fromEntries([...evidence.entries()].sort(([a], [b]) => a.localeCompare(b))),
     humanIntent,
+    productHierarchy,
   };
   const file = options.persist === false ? null : await writeProductGrounding(projectRoot, model);
   return { model, path: file };
@@ -385,6 +482,8 @@ export async function correctProductFeature(projectRoot, input = {}) {
   if (expectedVersion !== feature.version) throw new ConflictError("Feature version is stale.", { featureId, expectedVersion, actualVersion: feature.version });
   const patch = Object.fromEntries(Object.entries(input.patch || {}).filter(([key]) => ALLOWED_CORRECTION_FIELDS.has(key)));
   if (!Object.keys(patch).length) throw new ValidationError("At least one supported Feature correction is required.", { featureId });
+  if (patch.parentFeatureId && !model.features[patch.parentFeatureId]) throw new ValidationError("Parent Feature does not exist.", { featureId, parentFeatureId: patch.parentFeatureId });
+  if (patch.groupId && !model.productHierarchy?.groups?.[patch.groupId]) throw new ValidationError("Product group does not exist.", { featureId, groupId: patch.groupId });
   const now = input.now || new Date().toISOString();
   const current = model.humanIntent?.featureCorrections?.[featureId];
   const correction = {
@@ -426,6 +525,9 @@ export async function correctProductFeature(projectRoot, input = {}) {
     humanIntent: { corrected: true, reason: correction.reason, actor: correction.actor, version: correction.version },
     updatedAt: now,
   };
+  const evidence = new Map(Object.entries(model.evidence));
+  model.productHierarchy = buildProductHierarchy(model.features, evidence, model.productHierarchy, { repoRevision: model.repoRevision, observedAt: now });
+  model.evidence = Object.fromEntries([...evidence.entries()].sort(([a], [b]) => a.localeCompare(b)));
   model.version += 1;
   model.updatedAt = now;
   model.stats.evidence = Object.keys(model.evidence).length;
@@ -443,11 +545,31 @@ export function summarizeProductMap(model) {
       id: feature.id,
       name: feature.name,
       description: feature.description,
+      level: feature.level || 2,
+      groupId: feature.groupId || null,
+      parentFeatureId: feature.parentFeatureId || null,
+      childFeatureIds: feature.childFeatureIds || [],
       productState: feature.productState,
       actionability: feature.actionability,
       certainty: feature.groundingRefs.some((id) => model.evidence[id]?.type === "human_confirmation") ? "confirmed" : "possible",
       groundingRefs: feature.groundingRefs,
     })),
+    hierarchy: {
+      levels: model.productHierarchy?.levels || 2,
+      roots: (model.productHierarchy?.roots || []).filter((id) => model.productHierarchy?.groups?.[id]?.featureIds?.length),
+      groups: Object.values(model.productHierarchy?.groups || {})
+        .filter((group) => group.featureIds?.length)
+        .map((group) => ({
+          id: group.id,
+          name: group.name,
+          description: group.description,
+          level: group.level,
+          parentGroupId: group.parentGroupId,
+          featureIds: group.featureIds,
+          inferenceRefs: group.inferenceRefs,
+          certainty: "possible",
+        })),
+    },
     stats: model.stats,
   };
 }

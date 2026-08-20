@@ -18,16 +18,22 @@
     "stats": {
       "scannedFiles": 11,
       "resolvedReferences": 11,
-      "features": 3,
-      "evidence": 41,
-      "confirmedEvidence": 38,
-      "possibleEvidence": 3
+      "features": 4,
+      "evidence": 45,
+      "confirmedEvidence": 39,
+      "possibleEvidence": 6
     },
     "features": [
       { "id": "feature-account", "name": "账号管理", "certainty": "possible", "groundingRefs": 5 },
       { "id": "feature-billing", "name": "账单管理", "certainty": "possible", "groundingRefs": 9 },
+      { "id": "feature-project", "name": "项目管理", "certainty": "possible", "groundingRefs": 5 },
       { "id": "feature-settings", "name": "设置", "certainty": "possible", "groundingRefs": 5 }
     ],
+    "hierarchy": {
+      "levels": 2,
+      "groupsBeforeHumanCorrection": ["group-project-delivery", "group-other"],
+      "groupInferenceCertainty": "possible"
+    },
     "evidenceTypes": {
       "file": 11,
       "reference": 11,
@@ -35,7 +41,7 @@
       "test": 2,
       "page": 2,
       "api": 2,
-      "semantic_inference": 3
+      "semantic_inference": 6
     },
     "traceSample": {
       "featureId": "feature-billing",
@@ -54,9 +60,9 @@
       "scannedFiles": 42,
       "resolvedReferences": 58,
       "features": 15,
-      "evidence": 279,
-      "confirmedEvidence": 264,
-      "possibleEvidence": 15
+      "evidence": 286,
+      "confirmedEvidence": 265,
+      "possibleEvidence": 21
     },
     "features": [
       "智能体协作",
@@ -79,10 +85,23 @@
       "file": 42,
       "reference": 58,
       "symbol": 75,
-      "test": 50,
+      "test": 51,
       "database": 8,
       "api": 31,
-      "semantic_inference": 15
+      "semantic_inference": 21
+    },
+    "hierarchy": {
+      "levels": 2,
+      "rootGroupCount": 6,
+      "groups": [
+        { "id": "group-workspace-map", "name": "工作区与地图", "featureIds": ["feature-board", "feature-code-board", "feature-product-map", "feature-workspace"] },
+        { "id": "group-project-knowledge", "name": "项目知识", "featureIds": ["feature-artifact", "feature-context", "feature-decision"] },
+        { "id": "group-project-delivery", "name": "项目推进", "featureIds": ["feature-project", "feature-task"] },
+        { "id": "group-ai-collaboration", "name": "AI 协作", "featureIds": ["feature-agent", "feature-handoff", "feature-message", "feature-selection"] },
+        { "id": "group-sync-extensions", "name": "同步与扩展", "featureIds": ["feature-cloud"] },
+        { "id": "group-compatibility-maintenance", "name": "兼容与维护", "featureIds": ["feature-legacy"] }
+      ],
+      "groupInferenceCertainty": "possible"
     },
     "generatedAssetsExcluded": true,
     "traceSample": {
@@ -102,8 +121,11 @@
     "initialVersion": 1,
     "correctedVersion": 2,
     "correctedName": "订阅与账单",
+    "correctedGroupId": "group-project-knowledge",
+    "correctedParentFeatureId": "feature-project",
     "separateProcessRestartPreserved": true,
     "rescanPreserved": true,
+    "parentAndGroupPreserved": true,
     "latestObservedEvidencePreserved": true,
     "staleExpectedVersionRejected": true,
     "humanConfirmationEvidenceAdded": true

@@ -4,7 +4,7 @@
 
 证明真实 TS/JS Web 项目可以稳定生成面向产品的 Product Map，并且每个自动推断的 Feature 都能回到真实、可定位、带仓库修订版本的 Evidence。
 
-状态：`TECHNICAL PASS — HUMAN PRODUCT-MAP ACCEPTANCE PENDING`
+状态：`PASS`
 
 ## Baseline Audit
 
@@ -108,7 +108,20 @@ Feature ID 来自产品概念，不依赖单一文件路径。文件移动后，
 
 ### Product Maps
 
-受控项目自动生成：账号管理、账单管理、设置。真实 My Whiteboard 自动生成：智能体协作、项目产物、可视化白板、云同步、代码地图、项目上下文、项目决策、智能体交接、旧版迁移、协作消息、产品地图、项目管理、聚焦上下文、任务管理、工作区。
+受控项目自动生成：账号管理、账单管理、项目管理、设置。真实 My Whiteboard 自动生成：智能体协作、项目产物、可视化白板、云同步、代码地图、项目上下文、项目决策、智能体交接、旧版迁移、协作消息、产品地图、项目管理、聚焦上下文、任务管理、工作区。
+
+真实项目的一级 Product Map 已收敛为 6 组、2 层：
+
+| 一级产品能力 | 子能力 |
+| --- | --- |
+| 工作区与地图 | 工作区、可视化白板、代码地图、产品地图 |
+| 项目知识 | 项目上下文、项目决策、项目产物 |
+| 项目推进 | 项目管理、任务管理 |
+| AI 协作 | 智能体协作、智能体交接、协作消息、聚焦上下文 |
+| 同步与扩展 | 云同步 |
+| 兼容与维护 | 旧版迁移 |
+
+分组和父子关系属于 Product Inference / Human Intent；每个一级组有自己的 `semantic_inference` Evidence，绝不改写 Feature 的 Code Truth。
 
 这些 Feature 只从 page / route / API / MCP operation 等产品信号产生；普通文件和模块不会单独变成 Product Feature。每个自动 Feature 至少包含一个 confirmed Observed Evidence 和一个 possible `semantic_inference` Evidence。
 
@@ -118,6 +131,7 @@ Feature ID 来自产品概念，不依赖单一文件路径。文件移动后，
 
 - 在独立 Node 进程中重新读取，纠偏仍存在；
 - 重新扫描后名称、描述、Feature Version 与 human confirmation 仍存在；
+- 同时将 `feature-billing` 移入“项目知识”，并挂到 `feature-project` 之下；重启和重扫后 parent/group 仍存在；
 - Observed Evidence 更新到新的扫描时间；
 - 使用旧 expected version 的写入被 `VERSION_CONFLICT` 拒绝；
 - 纠偏没有修改或伪造 Observed Code Truth。
@@ -134,6 +148,6 @@ Feature ID 来自产品概念，不依赖单一文件路径。文件移动后，
 - monorepo 中的嵌套应用应分别以其应用根扫描；Proof A 不自动猜测所有 package boundary。
 - 语义推断仍标记 `possible`。在用户确认 Product Map 前，不升级为 `confirmed`。
 
-机器证据见 [evidence/proof-a-results.json](./evidence/proof-a-results.json)。完整回归为 39/39 tests、typecheck、build 与 31-tool smoke。Git SHA 在 Gate 提交后记录于阶段报告。
+机器证据见 [evidence/proof-a-results.json](./evidence/proof-a-results.json)。层级修正后的完整回归为 39/39 tests、typecheck、build 与 31-tool smoke。Git SHA 在 Gate 提交后记录于阶段报告。
 
-Proof A 现在只等待用户对真实项目 Product Map 的产品语言与核心能力覆盖进行人工确认。确认前状态保持 BLOCKED，不进入 Proof B。
+Proof A 的 Grounding、层级收敛、Evidence 保留和 Human Intent 持久化均通过，记为 `PASS`。可以进入 Proof B；Proof B 仍必须遵守真实 Agent、真实 Repo 和重新观察验证的约束。
