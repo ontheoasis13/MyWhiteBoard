@@ -10,6 +10,7 @@ import {
   connectAgent,
   createChange,
   createProjectWorkspace,
+  getChange,
   getExecution,
   reportHostedExecution,
   resumeExecution,
@@ -95,6 +96,9 @@ test("hosted Agent can claim and report an approved Change through the neutral A
   const projectRoot = await gitProject();
   await connectAgent(projectRoot, { id: "external-host", displayName: "External MCP Host", client: "external-mcp", capabilities: ["execution"] });
   const { change } = await createChange(projectRoot, { id: "change-hosted", title: "Hosted change", status: "approved", contract: { files: ["README.md"], operation: "append" }, acceptanceCriteria: ["README contains hosted-change"] }, { id: "human", client: "test" });
+  const changeView = await getChange(projectRoot, change.id);
+  assert.equal(changeView.executionReadiness.state, "BLOCKED");
+  assert.ok(changeView.executionReadiness.reasonCodes.includes("DIRTY_WORKSPACE_NEEDS_ISOLATION"));
   const claimed = await claimHostedExecution(projectRoot, { changeId: change.id, agentId: "external-host", actor: { id: "external-host", client: "external-mcp" } });
   assert.equal(claimed.execution.status, "running");
   assert.equal(claimed.execution.changeId, change.id);

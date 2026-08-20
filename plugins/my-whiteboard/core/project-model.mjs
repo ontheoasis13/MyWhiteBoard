@@ -7,7 +7,17 @@ const execFileAsync = promisify(execFile);
 
 export const PROJECT_MODEL_VERSION = 1;
 export const EVIDENCE_SCHEMA_VERSION = 1;
-export const ACTIONABILITY_STATES = Object.freeze(["UNDERSTOOD", "GROUNDED", "ACTIONABLE", "EXECUTABLE"]);
+export const FEATURE_ACTIONABILITY_STATES = Object.freeze(["UNDERSTOOD", "GROUNDED", "ACTIONABLE"]);
+export const ACTIONABILITY_STATES = FEATURE_ACTIONABILITY_STATES;
+export const EXECUTION_READINESS_STATES = Object.freeze(["READY", "BLOCKED"]);
+export const EXECUTION_REASON_CODES = Object.freeze([
+  "CHANGE_NOT_APPROVED",
+  "REPO_SNAPSHOT_STALE",
+  "DIRTY_WORKSPACE_NEEDS_ISOLATION",
+  "NO_COMPATIBLE_AGENT",
+  "AGENT_OFFLINE",
+  "FEATURE_NOT_ACTIONABLE",
+]);
 
 function clone(value) {
   return value === undefined ? undefined : JSON.parse(JSON.stringify(value));
@@ -67,12 +77,13 @@ export function normalizeRepoSnapshot(model = {}) {
   };
 }
 
-function stateFromLegacy(value) {
+export function normalizeFeatureActionability(value) {
   const normalized = String(value || "").toUpperCase();
-  if (ACTIONABILITY_STATES.includes(normalized)) return normalized;
-  if (normalized === "GROUNDED") return "GROUNDED";
-  if (normalized === "ACTIONABLE") return "ACTIONABLE";
-  if (normalized === "EXECUTABLE") return "EXECUTABLE";
+  if (FEATURE_ACTIONABILITY_STATES.includes(normalized)) return normalized;
+  // 0.2/early 0.3 persisted EXECUTABLE on Feature. It is a derived label,
+  // so migrate it to the highest Feature semantic state without retaining a
+  // permanent execution permission on Human Intent.
+  if (normalized === "EXECUTABLE") return "ACTIONABLE";
   return "UNDERSTOOD";
 }
 
@@ -92,14 +103,53 @@ export function evaluateActionability(feature, evidenceById = {}, repoSnapshot =
       reasons.push("Confirmed evidence matches the current RepoSnapshot.");
     } else if (confirmed) reasons.push("Evidence does not match the current RepoSnapshot.");
   }
-  const intent = String(feature.humanIntent?.actionability || feature.actionability || "").toUpperCase();
-  if (state === "ACTIONABLE" && intent === "EXECUTABLE" && !repoSnapshot.dirty && feature.hidden !== true) {
-    state = "EXECUTABLE";
-    reasons.push("Human Intent explicitly permits execution and the RepoSnapshot is clean.");
-  } else if (intent === "EXECUTABLE" && repoSnapshot.dirty) {
-    reasons.push("Execution is gated while the working tree is dirty.");
-  }
   return { state, reasons, checkedAt: repoSnapshot.capturedAt || null };
+}
+
+function hasSnapshotMismatch(input = {}) {
+  if (input.repoSnapshotStale === true) return true;
+  const expected = input.expectedRepoSnapshotId || input.change?.baseline?.workingTreeFingerprint || input.change?.repoSnapshotId;
+  return Boolean(expected && input.repoSnapshot?.workingTreeFingerprint && expected !== input.repoSnapshot.workingTreeFingerprint);
+}
+
+/**
+ * Derive execution readiness from a Change/Execution context. This is not a
+ * Feature state and is intentionally not persisted as Feature semantic truth.
+ */
+export function deriveExecutionReadiness(input = {}) {
+  const reasons = [];
+  const change = input.change || {};
+  const feature = input.feature || {};
+  const repoSnapshot = input.repoSnapshot || {};
+  const featureActionability = String(feature.actionability || input.featureActionability || "").toUpperCase();
+
+  if (change.status !== "approved") reasons.push("CHANGE_NOT_APPROVED");
+  if (featureActionability && featureActionability !== "ACTIONABLE") reasons.push("FEATURE_NOT_ACTIONABLE");
+  if (hasSnapshotMismatch(input)) reasons.push("REPO_SNAPSHOT_STALE");
+  if (repoSnapshot.dirty && input.repoSafetyReady !== true) reasons.push("DIRTY_WORKSPACE_NEEDS_ISOLATION");
+  if (input.compatibleAgentAvailable !== true) reasons.push("NO_COMPATIBLE_AGENT");
+  if (["offline", "error"].includes(String(input.agentStatus || "").toLowerCase())) reasons.push("AGENT_OFFLINE");
+
+  const uniqueReasons = [...new Set(reasons)];
+  const state = uniqueReasons.length ? "BLOCKED" : "READY";
+  return {
+    state,
+    reasonCodes: uniqueReasons,
+    reasons: uniqueReasons.map((code) => ({ code, message: executionReasonMessage(code) })),
+    executableLabel: state === "READY" && featureActionability === "ACTIONABLE" ? "EXECUTABLE" : null,
+    checkedAt: repoSnapshot.capturedAt || null,
+  };
+}
+
+function executionReasonMessage(code) {
+  return {
+    CHANGE_NOT_APPROVED: "Change must be explicitly approved before execution.",
+    REPO_SNAPSHOT_STALE: "The execution baseline does not match the current RepoSnapshot.",
+    DIRTY_WORKSPACE_NEEDS_ISOLATION: "The working tree is dirty and needs safe isolation before execution.",
+    NO_COMPATIBLE_AGENT: "No compatible connected Agent is available for this Change.",
+    AGENT_OFFLINE: "The selected Agent is offline or unavailable.",
+    FEATURE_NOT_ACTIONABLE: "The Feature is not yet actionable from its current Grounding.",
+  }[code] || "Execution readiness is blocked.";
 }
 
 export function normalizeEvidenceRecord(item = {}, repoSnapshot = {}) {
@@ -166,9 +216,16 @@ export function formalizeProjectModel(model, repoSnapshot = normalizeRepoSnapsho
   normalized.repoSnapshot = clone(repoSnapshot);
   normalized.repoRevision = repoSnapshot.headRevision || normalized.repoRevision || null;
   normalized.evidence = Object.fromEntries(Object.entries(normalized.evidence || {}).map(([id, item]) => [id, normalizeEvidenceRecord(item, repoSnapshot)]));
+  normalized.humanIntent = clone(normalized.humanIntent || { featureCorrections: {} });
+  normalized.humanIntent.featureCorrections ||= {};
+  for (const correction of Object.values(normalized.humanIntent.featureCorrections)) {
+    if (correction?.patch?.actionability) correction.patch.actionability = normalizeFeatureActionability(correction.patch.actionability);
+  }
   normalized.features = Object.fromEntries(Object.entries(normalized.features || {}).map(([id, feature]) => {
     const actionabilityGate = evaluateActionability(feature, normalized.evidence, repoSnapshot);
-    return [id, { ...feature, actionability: actionabilityGate.state, actionabilityGate }];
+    const humanIntent = feature.humanIntent ? clone(feature.humanIntent) : feature.humanIntent;
+    if (humanIntent?.actionability) humanIntent.actionability = normalizeFeatureActionability(humanIntent.actionability);
+    return [id, { ...feature, humanIntent, actionability: actionabilityGate.state, actionabilityGate }];
   }));
   normalized.productMapProjection = projectMapProjection(normalized);
   return normalized;

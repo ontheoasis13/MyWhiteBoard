@@ -6,7 +6,8 @@ import { randomUUID } from "node:crypto";
 import { applyWorkspaceTransaction, readWorkspace, workspacePaths } from "./store.mjs";
 import { clone, timestamp } from "./schema.mjs";
 import { NotFoundError, ValidationError } from "./errors.mjs";
-import { captureRepoSnapshot } from "./project-model.mjs";
+import { captureRepoSnapshot, deriveExecutionReadiness } from "./project-model.mjs";
+import { readProductGrounding } from "./product-grounding.mjs";
 
 const execFileAsync = promisify(execFile);
 const processHandles = new Map();
@@ -68,7 +69,31 @@ export async function createChange(projectRoot, input, actor) {
 
 export async function getChange(projectRoot, changeId) {
   const workspace = await readWorkspace(projectRoot);
-  return { change: requireChange(workspace, changeId), workspaceVersion: workspace.workspaceVersion };
+  const change = requireChange(workspace, changeId);
+  const snapshot = await repoSnapshot(projectRoot);
+  let feature = null;
+  try {
+    const model = await readProductGrounding(projectRoot);
+    feature = change.featureId ? model.features?.[change.featureId] || null : null;
+  } catch (error) {
+    if (error?.code !== "NOT_FOUND") throw error;
+  }
+  const requiredCapabilities = Array.isArray(change.contract?.requiredCapabilities)
+    ? change.contract.requiredCapabilities.map(String)
+    : [];
+  const candidates = Object.values(workspace.entities.agents || {}).filter((agent) => {
+    if (!["connected", "idle", "working"].includes(agent.status)) return false;
+    return requiredCapabilities.every((capability) => (agent.capabilities || []).includes(capability));
+  });
+  const executionReadiness = deriveExecutionReadiness({
+    change,
+    feature,
+    repoSnapshot: snapshot,
+    repoSafetyReady: !snapshot.dirty,
+    compatibleAgentAvailable: candidates.length > 0,
+    agentStatus: candidates[0]?.status,
+  });
+  return { change, executionReadiness, workspaceVersion: workspace.workspaceVersion };
 }
 
 export async function getExecution(projectRoot, executionId) {

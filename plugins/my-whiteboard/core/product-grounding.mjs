@@ -6,7 +6,7 @@ import { promisify } from "node:util";
 import { ConflictError, NotFoundError, ValidationError } from "./errors.mjs";
 import { OBSERVATION_EXTENSIONS, scanProjectSources } from "./source-observation.mjs";
 import { slug } from "./schema.mjs";
-import { captureRepoSnapshot, formalizeProjectModel, normalizeEvidenceRecord, normalizeRepoSnapshot, projectMapProjection } from "./project-model.mjs";
+import { captureRepoSnapshot, formalizeProjectModel, normalizeEvidenceRecord, normalizeFeatureActionability, normalizeRepoSnapshot, projectMapProjection } from "./project-model.mjs";
 
 const execFileAsync = promisify(execFile);
 const MODEL_SCHEMA_VERSION = 1;
@@ -492,6 +492,7 @@ export async function correctProductFeature(projectRoot, input = {}) {
   const expectedVersion = Number(input.expectedVersion ?? input.expected_version);
   if (expectedVersion !== feature.version) throw new ConflictError("Feature version is stale.", { featureId, expectedVersion, actualVersion: feature.version });
   const patch = Object.fromEntries(Object.entries(input.patch || {}).filter(([key]) => ALLOWED_CORRECTION_FIELDS.has(key)));
+  if (patch.actionability) patch.actionability = normalizeFeatureActionability(patch.actionability);
   if (!Object.keys(patch).length) throw new ValidationError("At least one supported Feature correction is required.", { featureId });
   if (patch.parentFeatureId && !model.features[patch.parentFeatureId]) throw new ValidationError("Parent Feature does not exist.", { featureId, parentFeatureId: patch.parentFeatureId });
   if (patch.groupId && !model.productHierarchy?.groups?.[patch.groupId]) throw new ValidationError("Product group does not exist.", { featureId, groupId: patch.groupId });

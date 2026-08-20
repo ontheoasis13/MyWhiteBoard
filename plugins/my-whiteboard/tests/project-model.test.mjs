@@ -5,7 +5,7 @@ import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
-import { readProductGrounding, scanProductGrounding } from "../core/index.mjs";
+import { deriveExecutionReadiness, readProductGrounding, scanProductGrounding } from "../core/index.mjs";
 
 const execFileAsync = promisify(execFile);
 
@@ -82,4 +82,56 @@ test("Product Map projection preserves visual arrangement separately from semant
   assert.deepEqual(rescanned.model.visualLayout[featureId], { x: 640, y: 180 });
   assert.deepEqual(rescanned.model.productMapProjection.visualLayout[featureId], { x: 640, y: 180 });
   assert.equal(rescanned.model.productMapProjection.layoutAuthority, "visual-arrangement-only");
+});
+
+test("Feature actionability never persists EXECUTABLE and ignores Human Intent execution permission", async () => {
+  const root = await gitProject();
+  const scanned = await scanProductGrounding(root);
+  const modelPath = path.join(root, ".my-whiteboard", "product-model.json");
+  const persisted = JSON.parse(await readFile(modelPath, "utf8"));
+  const featureId = Object.keys(persisted.features)[0];
+  persisted.features[featureId].actionability = "EXECUTABLE";
+  persisted.features[featureId].humanIntent = { actionability: "EXECUTABLE" };
+  persisted.humanIntent = { featureCorrections: { [featureId]: { version: 1, patch: { actionability: "EXECUTABLE" } } } };
+  await writeFile(modelPath, `${JSON.stringify(persisted, null, 2)}\n`);
+  const migrated = await readProductGrounding(root);
+  assert.notEqual(migrated.features[featureId].actionability, "EXECUTABLE");
+  assert.ok(["UNDERSTOOD", "GROUNDED", "ACTIONABLE"].includes(migrated.features[featureId].actionability));
+  assert.equal(migrated.features[featureId].humanIntent.actionability, "ACTIONABLE");
+  assert.equal(migrated.humanIntent.featureCorrections[featureId].patch.actionability, "ACTIONABLE");
+});
+
+test("Execution readiness is derived on Change/Execution context with explainable reasons", () => {
+  const base = {
+    feature: { actionability: "ACTIONABLE" },
+    change: { status: "approved" },
+    repoSnapshot: { dirty: false, workingTreeFingerprint: "current", capturedAt: "2026-08-20T08:03:00.000Z" },
+    compatibleAgentAvailable: true,
+  };
+  const ready = deriveExecutionReadiness(base);
+  assert.equal(ready.state, "READY");
+  assert.deepEqual(ready.reasonCodes, []);
+  assert.equal(ready.executableLabel, "EXECUTABLE");
+
+  const blocked = deriveExecutionReadiness({
+    ...base,
+    change: { status: "draft" },
+    repoSnapshot: { ...base.repoSnapshot, dirty: true },
+    repoSafetyReady: false,
+    compatibleAgentAvailable: false,
+    agentStatus: "offline",
+    repoSnapshotStale: true,
+  });
+  assert.equal(blocked.state, "BLOCKED");
+  assert.deepEqual(blocked.reasonCodes, [
+    "CHANGE_NOT_APPROVED",
+    "REPO_SNAPSHOT_STALE",
+    "DIRTY_WORKSPACE_NEEDS_ISOLATION",
+    "NO_COMPATIBLE_AGENT",
+    "AGENT_OFFLINE",
+  ]);
+  assert.equal(blocked.executableLabel, null);
+
+  const dirtyButIsolated = deriveExecutionReadiness({ ...base, repoSnapshot: { ...base.repoSnapshot, dirty: true }, repoSafetyReady: true });
+  assert.equal(dirtyButIsolated.state, "READY");
 });

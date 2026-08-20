@@ -13,7 +13,9 @@
     "projectModelVersion": 1,
     "repoSnapshotFields": ["headRevision", "dirty", "workingTreeFingerprint", "changedFiles", "capturedAt"],
     "evidenceSchemaVersion": 1,
-    "actionabilityStates": ["UNDERSTOOD", "GROUNDED", "ACTIONABLE", "EXECUTABLE"],
+    "actionabilityStates": ["UNDERSTOOD", "GROUNDED", "ACTIONABLE"],
+    "executionReadinessStates": ["READY", "BLOCKED"],
+    "executableLabel": "derived only from Feature ACTIONABLE plus approved Change, repo safety readiness, and compatible Agent availability",
     "projection": "Product Map Projection with visualLayout separated"
   },
   "gate": {

@@ -295,14 +295,14 @@ export const workspaceTools = [
   {
     name: "product_feature_correct",
     title: "Persist a Human Intent correction",
-    description: "Correct a grounded Feature using Entity Version concurrency. The correction survives restart and rescan without overwriting observed code truth.",
+    description: "Correct a grounded Feature using Entity Version concurrency. Feature actionability accepts only UNDERSTOOD, GROUNDED, or ACTIONABLE; EXECUTABLE is a derived Change/Execution label and is never persisted on Feature.",
     inputSchema: {
       type: "object",
       properties: {
         project_root: { type: "string" },
         feature_id: { type: "string" },
         expected_version: { type: "integer", minimum: 1 },
-        patch: { type: "object", properties: { name: { type: "string" }, description: { type: "string" }, parentFeatureId: { oneOf: [{ type: "string" }, { type: "null" }] }, groupId: { type: "string" }, productState: { type: "string" }, actionability: { type: "string" }, hidden: { type: "boolean" } }, additionalProperties: false },
+        patch: { type: "object", properties: { name: { type: "string" }, description: { type: "string" }, parentFeatureId: { oneOf: [{ type: "string" }, { type: "null" }] }, groupId: { type: "string" }, productState: { type: "string" }, actionability: { type: "string", enum: ["UNDERSTOOD", "GROUNDED", "ACTIONABLE", "understood", "grounded", "actionable"] }, hidden: { type: "boolean" } }, additionalProperties: false },
         reason: { type: "string" },
         actor: actorSchema,
       },

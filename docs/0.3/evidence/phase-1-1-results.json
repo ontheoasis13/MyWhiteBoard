@@ -1,0 +1,23 @@
+{
+  "phase": "1.1",
+  "title": "Feature Actionability / Execution Readiness boundary",
+  "status": "pass",
+  "featureActionabilityStates": ["UNDERSTOOD", "GROUNDED", "ACTIONABLE"],
+  "executionReadinessStates": ["READY", "BLOCKED"],
+  "reasonCodes": [
+    "CHANGE_NOT_APPROVED",
+    "REPO_SNAPSHOT_STALE",
+    "DIRTY_WORKSPACE_NEEDS_ISOLATION",
+    "NO_COMPATIBLE_AGENT",
+    "AGENT_OFFLINE",
+    "FEATURE_NOT_ACTIONABLE"
+  ],
+  "executableLabel": "derived-only",
+  "legacyExecutableMigration": "pass",
+  "humanIntentPermissionBoundary": "pass",
+  "oldWorkspaceRead": "pass",
+  "tests": "51/51 passed",
+  "typecheck": "pass",
+  "build": "pass",
+  "mcpSmoke": "pass (42 tools)"
+}
