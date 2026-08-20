@@ -60,6 +60,7 @@ test("starts a real process for an approved Change and persists repo evidence", 
     changeId: change.id,
     agentId: "reference-agent",
     adapter: processAdapter(agentPath),
+    repoSafetyReady: true,
     actor: { id: "reference-agent", client: "test" },
   });
   assert.equal(started.execution.changeId, change.id);
@@ -77,16 +78,28 @@ test("starts a real process for an approved Change and persists repo evidence", 
   assert.equal((await getExecution(projectRoot, completed.id)).execution.status, "completed");
 });
 
+test("execution_start re-checks the Change baseline and rejects RepoSnapshot drift", async () => {
+  const projectRoot = await gitProject();
+  const agentPath = path.join(projectRoot, "drift-agent.mjs");
+  await writeFile(agentPath, "process.exit(0);\n", "utf8");
+  const { change } = await createChange(projectRoot, { id: "change-drift", title: "Drift check", status: "approved", contract: {} }, { id: "human", client: "test" });
+  await appendFile(path.join(projectRoot, "README.md"), "drift-before-start\n", "utf8");
+  await assert.rejects(
+    startExecution(projectRoot, { changeId: change.id, agentId: "reference-agent", adapter: processAdapter(agentPath) }),
+    (error) => error.code === "VALIDATION_ERROR" && error.details.executionReadiness.reasonCodes.includes("REPO_SNAPSHOT_STALE"),
+  );
+});
+
 test("stop persists interrupted state and resume creates a linked Execution", async () => {
   const projectRoot = await gitProject();
   const agentPath = path.join(projectRoot, "slow-agent.mjs");
   await writeFile(agentPath, `setTimeout(() => process.exit(0), 5000);\n`, "utf8");
   const { change } = await createChange(projectRoot, { id: "change-stop", title: "Interruptible change", status: "approved", contract: {} }, { id: "human", client: "test" });
-  const started = await startExecution(projectRoot, { changeId: change.id, agentId: "reference-agent", adapter: processAdapter(agentPath), actor: { id: "reference-agent", client: "test" } });
+  const started = await startExecution(projectRoot, { changeId: change.id, agentId: "reference-agent", adapter: processAdapter(agentPath), repoSafetyReady: true, actor: { id: "reference-agent", client: "test" } });
   await stopExecution(projectRoot, started.execution.id, { id: "human", client: "test" });
   const interrupted = await waitFor(projectRoot, started.execution.id, (execution) => execution.status === "interrupted");
   assert.equal(interrupted.lifecycle.some((event) => event.type === "interrupted"), true);
-  const resumed = await resumeExecution(projectRoot, interrupted.id, { id: "reference-agent", client: "test" });
+  const resumed = await resumeExecution(projectRoot, interrupted.id, { id: "reference-agent", client: "test" }, { repoSafetyReady: true });
   assert.equal(resumed.execution.parentExecutionId, interrupted.id);
   await stopExecution(projectRoot, resumed.execution.id, { id: "human", client: "test" });
   await waitFor(projectRoot, resumed.execution.id, (execution) => execution.status === "interrupted");
@@ -97,8 +110,8 @@ test("hosted Agent can claim and report an approved Change through the neutral A
   await connectAgent(projectRoot, { id: "external-host", displayName: "External MCP Host", client: "external-mcp", capabilities: ["execution"] });
   const { change } = await createChange(projectRoot, { id: "change-hosted", title: "Hosted change", status: "approved", contract: { files: ["README.md"], operation: "append" }, acceptanceCriteria: ["README contains hosted-change"] }, { id: "human", client: "test" });
   const changeView = await getChange(projectRoot, change.id);
-  assert.equal(changeView.executionReadiness.state, "BLOCKED");
-  assert.ok(changeView.executionReadiness.reasonCodes.includes("DIRTY_WORKSPACE_NEEDS_ISOLATION"));
+  assert.equal(changeView.executionReadiness.state, "READY");
+  assert.deepEqual(changeView.executionReadiness.reasonCodes, []);
   const claimed = await claimHostedExecution(projectRoot, { changeId: change.id, agentId: "external-host", actor: { id: "external-host", client: "external-mcp" } });
   assert.equal(claimed.execution.status, "running");
   assert.equal(claimed.execution.changeId, change.id);
@@ -110,5 +123,15 @@ test("hosted Agent can claim and report an approved Change through the neutral A
   await assert.rejects(
     reportHostedExecution(projectRoot, { executionId: claimed.execution.id, agentId: "other-agent", status: "completed" }),
     /claimed Agent/,
+  );
+});
+
+test("hosted claim requires an Agent execution capability, not mere presence", async () => {
+  const projectRoot = await gitProject();
+  await connectAgent(projectRoot, { id: "chat-only", displayName: "Chat Only", client: "external-mcp", capabilities: ["messages"] });
+  const { change } = await createChange(projectRoot, { id: "change-capability", title: "Capability check", status: "approved", contract: {} }, { id: "human", client: "test" });
+  await assert.rejects(
+    claimHostedExecution(projectRoot, { changeId: change.id, agentId: "chat-only", actor: { id: "chat-only", client: "external-mcp" } }),
+    (error) => error.code === "VALIDATION_ERROR" && error.details.executionReadiness.reasonCodes.includes("NO_COMPATIBLE_AGENT"),
   );
 });

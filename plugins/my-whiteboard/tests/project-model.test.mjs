@@ -135,3 +135,20 @@ test("Execution readiness is derived on Change/Execution context with explainabl
   const dirtyButIsolated = deriveExecutionReadiness({ ...base, repoSnapshot: { ...base.repoSnapshot, dirty: true }, repoSafetyReady: true });
   assert.equal(dirtyButIsolated.state, "READY");
 });
+
+test("Execution readiness aggregates multi-target Feature blockers without changing Feature states", () => {
+  const result = deriveExecutionReadiness({
+    change: { status: "approved" },
+    features: [
+      { id: "feature-member", actionability: "ACTIONABLE" },
+      { id: "feature-payment", actionability: "GROUNDED" },
+    ],
+    featureIds: ["feature-member", "feature-payment"],
+    repoSnapshot: { dirty: false, workingTreeFingerprint: "current", capturedAt: "2026-08-20T08:04:00.000Z" },
+    compatibleAgentAvailable: true,
+  });
+  assert.equal(result.status, "BLOCKED");
+  assert.deepEqual(result.reasonCodes, ["FEATURE_NOT_ACTIONABLE"]);
+  assert.deepEqual(result.reasons[0].featureIds, ["feature-member", "feature-payment"]);
+  assert.equal(result.reasons[0].suggestedAction, "REFRESH_GROUNDING");
+});

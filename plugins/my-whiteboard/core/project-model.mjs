@@ -48,7 +48,10 @@ function parseChangedFiles(status) {
 export async function captureRepoSnapshot(projectRoot, files = [], capturedAt = new Date().toISOString()) {
   const root = path.resolve(projectRoot);
   const headRevision = (await git(root, ["rev-parse", "HEAD"])).trim() || null;
-  const status = await git(root, ["status", "--porcelain", "--untracked-files=all"]);
+  // Workspace persistence is application metadata, not a product-code change.
+  // Excluding it keeps a Change baseline stable while the semantic workspace
+  // itself is being updated; source and generated-code changes remain visible.
+  const status = await git(root, ["status", "--porcelain", "--untracked-files=all", "--", ".", ":!.my-whiteboard"]);
   const changedFiles = parseChangedFiles(status);
   const fileHashes = files.map((file) => ({ relative: file.relative, sourceHash: file.sourceHash })).sort((a, b) => a.relative.localeCompare(b.relative));
   const workingTreeFingerprint = hash(JSON.stringify({ headRevision, status, fileHashes }));
@@ -122,9 +125,12 @@ export function deriveExecutionReadiness(input = {}) {
   const feature = input.feature || {};
   const repoSnapshot = input.repoSnapshot || {};
   const featureActionability = String(feature.actionability || input.featureActionability || "").toUpperCase();
+  const targets = Array.isArray(input.features) ? input.features : feature?.id || featureActionability ? [feature.id ? feature : { id: null, actionability: featureActionability }] : [];
+  const targetFeatureIds = Array.isArray(input.featureIds) ? input.featureIds.map(String) : targets.map((item) => item?.id).filter(Boolean);
+  const blockedFeatureIds = targets.filter((item) => !item || String(item.actionability || "").toUpperCase() !== "ACTIONABLE").map((item) => item?.id).filter(Boolean);
 
   if (change.status !== "approved") reasons.push("CHANGE_NOT_APPROVED");
-  if (featureActionability && featureActionability !== "ACTIONABLE") reasons.push("FEATURE_NOT_ACTIONABLE");
+  if (targets.length && (blockedFeatureIds.length || targets.some((item) => !item))) reasons.push("FEATURE_NOT_ACTIONABLE");
   if (hasSnapshotMismatch(input)) reasons.push("REPO_SNAPSHOT_STALE");
   if (repoSnapshot.dirty && input.repoSafetyReady !== true) reasons.push("DIRTY_WORKSPACE_NEEDS_ISOLATION");
   if (input.compatibleAgentAvailable !== true) reasons.push("NO_COMPATIBLE_AGENT");
@@ -134,9 +140,16 @@ export function deriveExecutionReadiness(input = {}) {
   const state = uniqueReasons.length ? "BLOCKED" : "READY";
   return {
     state,
+    status: state,
     reasonCodes: uniqueReasons,
-    reasons: uniqueReasons.map((code) => ({ code, message: executionReasonMessage(code) })),
-    executableLabel: state === "READY" && featureActionability === "ACTIONABLE" ? "EXECUTABLE" : null,
+    reasons: uniqueReasons.map((code) => ({
+      code,
+      message: executionReasonMessage(code),
+      recoverable: executionReasonRecoverable(code),
+      suggestedAction: executionReasonAction(code),
+      ...(code === "FEATURE_NOT_ACTIONABLE" ? { featureIds: targetFeatureIds.length ? targetFeatureIds : blockedFeatureIds } : {}),
+    })),
+    executableLabel: state === "READY" && (!targets.length || targets.every((item) => String(item?.actionability || "").toUpperCase() === "ACTIONABLE")) ? "EXECUTABLE" : null,
     checkedAt: repoSnapshot.capturedAt || null,
   };
 }
@@ -150,6 +163,21 @@ function executionReasonMessage(code) {
     AGENT_OFFLINE: "The selected Agent is offline or unavailable.",
     FEATURE_NOT_ACTIONABLE: "The Feature is not yet actionable from its current Grounding.",
   }[code] || "Execution readiness is blocked.";
+}
+
+function executionReasonRecoverable(code) {
+  return !["NO_COMPATIBLE_AGENT", "AGENT_OFFLINE"].includes(code);
+}
+
+function executionReasonAction(code) {
+  return {
+    CHANGE_NOT_APPROVED: "APPROVE_CHANGE",
+    REPO_SNAPSHOT_STALE: "REFRESH_GROUNDING",
+    DIRTY_WORKSPACE_NEEDS_ISOLATION: "ISOLATE_WORKSPACE",
+    NO_COMPATIBLE_AGENT: "CONNECT_COMPATIBLE_AGENT",
+    AGENT_OFFLINE: "RECONNECT_AGENT",
+    FEATURE_NOT_ACTIONABLE: "REFRESH_GROUNDING",
+  }[code] || "REVIEW_READINESS";
 }
 
 export function normalizeEvidenceRecord(item = {}, repoSnapshot = {}) {
@@ -177,6 +205,7 @@ export function projectMapProjection(model = {}) {
     repoSnapshot: clone(model.repoSnapshot),
     features: Object.values(model.features || {}).filter((feature) => !feature.hidden).map((feature) => ({
       id: feature.id,
+      nodeKind: "feature",
       name: feature.name,
       description: feature.description,
       level: feature.level || 2,
@@ -194,6 +223,7 @@ export function projectMapProjection(model = {}) {
       roots: (model.productHierarchy?.roots || []).filter((id) => model.productHierarchy?.groups?.[id]?.featureIds?.length),
       groups: Object.values(model.productHierarchy?.groups || {}).filter((group) => group.featureIds?.length).map((group) => ({
         id: group.id,
+        nodeKind: "group",
         name: group.name,
         description: group.description,
         level: group.level,

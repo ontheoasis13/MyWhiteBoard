@@ -55,7 +55,7 @@ try {
   assert(project.result.structuredContent.workspaceVersion === 1, "project creation failed");
   const agent = await request("tools/call", { name: "agent_connect", arguments: { project_root: projectRoot, agent: { id: "codex", displayName: "Codex", client: "codex", capabilities: ["code", "board"] } } });
   assert(agent.result.structuredContent.agent.version === 1, "Agent identity failed");
-  const claude = await request("tools/call", { name: "agent_connect", arguments: { project_root: projectRoot, agent: { id: "claude", displayName: "Claude", client: "claude", capabilities: ["review"] } } });
+  const claude = await request("tools/call", { name: "agent_connect", arguments: { project_root: projectRoot, agent: { id: "claude", displayName: "Claude", client: "claude", capabilities: ["review", "hostedExecution"] } } });
   assert(claude.result.structuredContent.agent.version === 1, "second Agent identity failed");
   const context = await request("tools/call", { name: "context_apply", arguments: { project_root: projectRoot, changes: [{ op: "create", entity: { id: "goal", title: "Goal", content: "Verify Single-Agent Workspace", sources: ["README.md"] } }] } });
   assert(context.result.structuredContent.entities.goal.version === 1, "context creation failed");
@@ -139,7 +139,8 @@ const synchronized = await request("tools/call", {
   const opened = await request("tools/call", { name: "workspace_open", arguments: { project_root: projectRoot, board_id: "architecture" } });
   assert(opened.result.structuredContent.embedded === false, "workspace attempted iframe embedding");
   const response = await fetch(opened.result.structuredContent.url);
-  assert(response.ok && (await response.text()).includes("My Whiteboard 工作区"), "standalone workspace failed");
+  const workspaceHtml = await response.text();
+  assert(response.ok && workspaceHtml.includes("My Whiteboard") && workspaceHtml.includes("产品视图"), "standalone workspace failed");
   process.stdout.write(`${JSON.stringify({ ok: true, project_root: projectRoot, board_id: "architecture", url: opened.result.structuredContent.url, tools: listed.result.tools.length }, null, 2)}\n`);
 } finally {
   child.kill();

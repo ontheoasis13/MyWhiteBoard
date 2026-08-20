@@ -1,0 +1,29 @@
+{
+  "phase": "1.1",
+  "title": "Hardening A1-A5",
+  "status": "pass",
+  "featureActionability": ["UNDERSTOOD", "GROUNDED", "ACTIONABLE"],
+  "executionReadiness": ["READY", "BLOCKED"],
+  "reasonCodes": [
+    "CHANGE_NOT_APPROVED",
+    "REPO_SNAPSHOT_STALE",
+    "DIRTY_WORKSPACE_NEEDS_ISOLATION",
+    "NO_COMPATIBLE_AGENT",
+    "AGENT_OFFLINE",
+    "FEATURE_NOT_ACTIONABLE"
+  ],
+  "gates": {
+    "authoritativeRecheck": "pass",
+    "multipleBlockers": "pass",
+    "multiTargetChange": "pass",
+    "groupFeatureBoundary": "pass",
+    "agentCapabilityBoundary": "pass",
+    "legacyWorkspaceRead": "pass",
+    "proofABCRegression": "pass"
+  },
+  "tests": "56/56 passed",
+  "typecheck": "pass",
+  "build": "pass",
+  "mcpSmoke": "pass (42 tools)",
+  "scope": "No new Agent Adapter, Safe Execution, or Phase 3 capability"
+}

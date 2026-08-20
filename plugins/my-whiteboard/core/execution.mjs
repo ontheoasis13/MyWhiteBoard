@@ -50,10 +50,16 @@ async function updateEntity(projectRoot, collection, id, patch, actor) {
 }
 
 export async function createChange(projectRoot, input, actor) {
+  const baseline = input?.baseline || input?.repoBaseline || await repoSnapshot(projectRoot);
+  const targetFeatureIds = Array.isArray(input?.targetFeatureIds)
+    ? input.targetFeatureIds.map(String)
+    : Array.isArray(input?.contract?.featureIds) ? input.contract.featureIds.map(String) : input?.featureId ? [String(input.featureId)] : [];
   const change = {
     id: String(input?.id || `change-${randomUUID().slice(0, 8)}`),
     title: String(input?.title || "Approved Change"),
     featureId: input?.featureId == null ? null : String(input.featureId),
+    targetFeatureIds,
+    baseline: clone(baseline),
     intent: String(input?.intent || ""),
     status: String(input?.status || "draft"),
     contract: clone(input?.contract || {}),
@@ -67,17 +73,19 @@ export async function createChange(projectRoot, input, actor) {
   return { ...result, change: workspace.entities.changes[change.id] };
 }
 
-export async function getChange(projectRoot, changeId) {
-  const workspace = await readWorkspace(projectRoot);
-  const change = requireChange(workspace, changeId);
-  const snapshot = await repoSnapshot(projectRoot);
-  let feature = null;
+async function featureAndAgentReadiness(projectRoot, workspace, change, options = {}) {
+  const snapshot = options.repoSnapshot || await repoSnapshot(projectRoot);
+  let model = null;
   try {
-    const model = await readProductGrounding(projectRoot);
-    feature = change.featureId ? model.features?.[change.featureId] || null : null;
+    model = await readProductGrounding(projectRoot);
   } catch (error) {
     if (error?.code !== "NOT_FOUND") throw error;
   }
+  const targetFeatureIds = [...new Set([
+    ...(Array.isArray(change.targetFeatureIds) ? change.targetFeatureIds : []),
+    ...(change.featureId ? [change.featureId] : []),
+  ].map(String))];
+  const features = targetFeatureIds.map((id) => model?.features?.[id] || { id, actionability: "UNDERSTOOD" });
   const requiredCapabilities = Array.isArray(change.contract?.requiredCapabilities)
     ? change.contract.requiredCapabilities.map(String)
     : [];
@@ -85,14 +93,27 @@ export async function getChange(projectRoot, changeId) {
     if (!["connected", "idle", "working"].includes(agent.status)) return false;
     return requiredCapabilities.every((capability) => (agent.capabilities || []).includes(capability));
   });
-  const executionReadiness = deriveExecutionReadiness({
+  return deriveExecutionReadiness({
     change,
-    feature,
+    feature: features[0],
+    features,
+    featureIds: targetFeatureIds,
     repoSnapshot: snapshot,
-    repoSafetyReady: !snapshot.dirty,
-    compatibleAgentAvailable: candidates.length > 0,
-    agentStatus: candidates[0]?.status,
+    expectedRepoSnapshotId: change.baseline?.workingTreeFingerprint,
+    repoSafetyReady: options.repoSafetyReady === undefined ? !snapshot.dirty : options.repoSafetyReady === true,
+    compatibleAgentAvailable: options.compatibleAgentAvailable === undefined ? candidates.length > 0 : options.compatibleAgentAvailable === true,
+    agentStatus: options.agentStatus || candidates[0]?.status,
   });
+}
+
+function readinessError(readiness) {
+  return new ValidationError("Change is not execution-ready.", { executionReadiness: readiness });
+}
+
+export async function getChange(projectRoot, changeId) {
+  const workspace = await readWorkspace(projectRoot);
+  const change = requireChange(workspace, changeId);
+  const executionReadiness = await featureAndAgentReadiness(projectRoot, workspace, change);
   return { change, executionReadiness, workspaceVersion: workspace.workspaceVersion };
 }
 
@@ -114,7 +135,7 @@ async function gitCommand(projectRoot, args) {
 
 export async function repoSnapshot(projectRoot) {
   const revision = await gitCommand(projectRoot, ["rev-parse", "HEAD"]);
-  const status = await gitCommand(projectRoot, ["status", "--short"]);
+  const status = await gitCommand(projectRoot, ["status", "--short", "--untracked-files=all", "--", ".", ":!.my-whiteboard"]);
   const snapshot = await captureRepoSnapshot(projectRoot, [], timestamp());
   return {
     ...snapshot,
@@ -220,7 +241,14 @@ export async function claimHostedExecution(projectRoot, options = {}) {
   const agentId = String(options.agentId || actor.id || "");
   const agent = workspace.entities.agents?.[agentId];
   if (!agent) throw new ValidationError("Execution Agent must be connected before claiming a Change.", { agentId });
-  if (change.status !== "approved") throw new ValidationError("Only an approved Change can be claimed for hosted execution.", { changeId: change.id, status: change.status });
+  const agentCapabilities = new Set(agent.capabilities || []);
+  const compatibleAgentAvailable = ["connected", "idle", "working"].includes(agent.status)
+    && (agentCapabilities.has("hostedExecution") || agentCapabilities.has("execution"));
+  const executionReadiness = await featureAndAgentReadiness(projectRoot, workspace, change, {
+    compatibleAgentAvailable,
+    agentStatus: agent.status,
+  });
+  if (executionReadiness.state !== "READY") throw readinessError(executionReadiness);
   const active = Object.values(workspace.entities.executions || {}).find((execution) => execution.changeId === change.id && ["queued", "running"].includes(execution.status));
   if (active) throw new ValidationError("Change already has an active Execution.", { changeId: change.id, executionId: active.id });
   const executionId = String(options.executionId || `execution-${randomUUID().slice(0, 8)}`);
@@ -321,8 +349,13 @@ export async function startExecution(projectRoot, options = {}) {
   const actor = options.actor || { id: options.agentId || "agent", client: "unknown" };
   const workspace = await readWorkspace(projectRoot);
   const change = requireChange(workspace, String(options.changeId || ""));
-  if (change.status !== "approved") throw new ValidationError("Only an approved Change can start execution.", { changeId: change.id, status: change.status });
   const adapter = createExecutionAdapter(options.adapter);
+  const adapterCapabilities = await adapter.capabilities();
+  const executionReadiness = await featureAndAgentReadiness(projectRoot, workspace, change, {
+    compatibleAgentAvailable: adapterCapabilities.available === true && adapterCapabilities.supports?.start === true,
+    repoSafetyReady: options.repoSafetyReady === true ? true : undefined,
+  });
+  if (executionReadiness.state !== "READY") throw readinessError(executionReadiness);
   const executionId = String(options.executionId || `execution-${randomUUID().slice(0, 8)}`);
   const repoBefore = await repoSnapshot(projectRoot);
   const execution = {
@@ -356,7 +389,7 @@ export async function startExecution(projectRoot, options = {}) {
       startedAt: timestamp(),
       lifecycle: [{ type: "queued", at: execution.lifecycle[0].at }, { type: "started", at: timestamp(), pid: handle.pid }],
     }, actor);
-    return { execution: saved.entity, handle, capabilities: await adapter.capabilities(), workspaceVersion: saved.workspaceVersion };
+    return { execution: saved.entity, handle, capabilities: adapterCapabilities, executionReadiness, workspaceVersion: saved.workspaceVersion };
   } catch (error) {
     const failed = await updateEntity(projectRoot, "executions", executionId, {
       status: "failed",
@@ -381,14 +414,25 @@ export async function stopExecution(projectRoot, executionId, actor) {
   return { execution: (await getExecution(projectRoot, executionId)).execution, workspaceVersion: (await readWorkspace(projectRoot)).workspaceVersion };
 }
 
-export async function resumeExecution(projectRoot, executionId, actor) {
+export async function resumeExecution(projectRoot, executionId, actor, options = {}) {
   const current = (await getExecution(projectRoot, executionId)).execution;
   if (!["interrupted", "failed", "cancelled"].includes(current.status)) throw new ValidationError("Only an interrupted, failed, or cancelled Execution can resume.", { executionId, status: current.status });
-  const workspace = await readWorkspace(projectRoot);
-  let change = requireChange(workspace, current.changeId);
+  let change = requireChange(await readWorkspace(projectRoot), current.changeId);
   if (change.status !== "approved") {
-    await updateEntity(projectRoot, "changes", change.id, { status: "approved" }, actor);
+    // The interrupted process can finish its Change transition just after the
+    // Execution reaches its terminal state. Re-read and retry the approval so
+    // resume never loses to that legitimate last lifecycle write.
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        await updateEntity(projectRoot, "changes", change.id, { status: "approved" }, actor);
+        break;
+      } catch (error) {
+        if (error?.code !== "VERSION_CONFLICT" || attempt === 2) throw error;
+        change = requireChange(await readWorkspace(projectRoot), current.changeId);
+        if (change.status === "approved") break;
+      }
+    }
     change = requireChange(await readWorkspace(projectRoot), current.changeId);
   }
-  return startExecution(projectRoot, { changeId: change.id, agentId: current.agentId, adapter: current.input?.adapter, parentExecutionId: current.id, actor });
+  return startExecution(projectRoot, { changeId: change.id, agentId: current.agentId, adapter: current.input?.adapter, parentExecutionId: current.id, repoSafetyReady: options.repoSafetyReady === true ? true : undefined, actor });
 }

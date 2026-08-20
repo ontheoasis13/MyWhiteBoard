@@ -9,6 +9,11 @@ import {
   getChangesSince,
   importLegacyBoards,
   readWorkspace,
+  readProductGrounding,
+  revertProductFeatureCorrection,
+  scanProductGrounding,
+  updateProductLayout,
+  correctProductFeature,
 } from "../core/index.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -123,6 +128,33 @@ export function createWorkspaceHttpService(options = {}) {
         if (!session) return sendJson(res, 401, { error: { code: "UNAUTHORIZED", message: "Workspace session is invalid or expired." } });
         if (req.method === "GET" && url.pathname === "/api/session") {
           return sendJson(res, 200, { workspace: await readWorkspace(session.projectRoot), activeBoardId: session.boardId });
+        }
+        if (req.method === "GET" && url.pathname === "/api/session/product-model") {
+          let model = await readProductGrounding(session.projectRoot, { optional: true });
+          if (!model) model = (await scanProductGrounding(session.projectRoot)).model;
+          const features = Object.values(model.features || {});
+          const status = !features.length ? "FAILED" : features.some((feature) => feature.actionability === "UNDERSTOOD") ? "PARTIAL" : "READY";
+          const freshness = model.repoSnapshot?.dirty || features.some((feature) => feature.actionability === "GROUNDED") ? "STALE" : "CURRENT";
+          return sendJson(res, 200, { model, status, freshness, featureCount: features.length });
+        }
+        if (req.method === "POST" && url.pathname === "/api/session/product-model/scan") {
+          const model = await scanProductGrounding(session.projectRoot, await jsonBody(req));
+          return sendJson(res, 200, { model: model.model, status: "READY", freshness: model.model.repoSnapshot?.dirty ? "STALE" : "CURRENT" });
+        }
+        if (req.method === "POST" && url.pathname === "/api/session/product-feature/correct") {
+          const body = await jsonBody(req);
+          const result = await correctProductFeature(session.projectRoot, { ...body, actor: body.actor || { id: "human", displayName: "用户", client: "product-view" } });
+          return sendJson(res, 200, { model: result.model, feature: result.feature, productMap: result.model.productMapProjection });
+        }
+        if (req.method === "POST" && url.pathname === "/api/session/product-feature/revert") {
+          const body = await jsonBody(req);
+          const result = await revertProductFeatureCorrection(session.projectRoot, body);
+          return sendJson(res, 200, { model: result.model, feature: result.feature, productMap: result.model.productMapProjection });
+        }
+        if (req.method === "POST" && url.pathname === "/api/session/product-feature/layout") {
+          const body = await jsonBody(req);
+          const result = await updateProductLayout(session.projectRoot, body);
+          return sendJson(res, 200, { model: result.model, feature: result.feature, productMap: result.model.productMapProjection });
         }
         if (req.method === "GET" && url.pathname === "/api/session/changes") {
           return sendJson(res, 200, await getChangesSince(session.projectRoot, Number(url.searchParams.get("since") || 0)));

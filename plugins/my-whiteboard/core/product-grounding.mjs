@@ -338,9 +338,10 @@ function buildProductHierarchy(features, evidence, previousHierarchy, base) {
   const groups = {};
   for (const definition of PRODUCT_GROUPS) {
     const previous = previousHierarchy?.groups?.[definition.id];
-    groups[definition.id] = {
-      id: definition.id,
-      entityType: "product-group",
+      groups[definition.id] = {
+        id: definition.id,
+        nodeKind: "group",
+        entityType: "product-group",
       level: 1,
       parentGroupId: null,
       version: previous?.version || 1,
@@ -356,6 +357,7 @@ function buildProductHierarchy(features, evidence, previousHierarchy, base) {
     if (!groups[groupId]) {
       groups[groupId] = {
         id: groupId,
+        nodeKind: "group",
         entityType: "product-group",
         level: 1,
         parentGroupId: null,
@@ -451,7 +453,11 @@ export async function scanProductGrounding(projectRoot, options = {}) {
   const base = { repoRevision: observation.repoRevision, repoSnapshotId: observation.repoSnapshot.workingTreeFingerprint, observedAt: observation.observedAt };
   const evidence = new Map(observation.evidence);
   const features = inferFeatures(evidence, base);
-  const humanIntent = previous?.humanIntent || { featureCorrections: {} };
+  const skippedHumanIntent = new Set((options.skipHumanIntentFeatureIds || []).map(String));
+  const humanIntent = {
+    ...(previous?.humanIntent || { featureCorrections: {} }),
+    featureCorrections: Object.fromEntries(Object.entries(previous?.humanIntent?.featureCorrections || {}).filter(([id]) => !skippedHumanIntent.has(id))),
+  };
   applyHumanIntent(features, evidence, humanIntent, previous, base);
   const productHierarchy = buildProductHierarchy(features, evidence, previous?.productHierarchy, base);
   const rawModel = {
@@ -482,6 +488,31 @@ export async function scanProductGrounding(projectRoot, options = {}) {
   const model = formalizeProjectModel(rawModel, observation.repoSnapshot);
   const file = options.persist === false ? null : await writeProductGrounding(projectRoot, model);
   return { model, path: file };
+}
+
+export async function updateProductLayout(projectRoot, input = {}) {
+  const model = await readProductGrounding(projectRoot);
+  const featureId = String(input.featureId || input.feature_id || "");
+  if (!featureId || !model.features[featureId]) throw new NotFoundError(`Feature not found: ${featureId}`, { featureId });
+  const position = input.layout && typeof input.layout === "object" ? input.layout : {};
+  model.visualLayout ||= {};
+  model.visualLayout[featureId] = { ...(model.visualLayout[featureId] || {}), ...position };
+  model.layoutVersion = Number(model.layoutVersion || 0) + 1;
+  model.layoutUpdatedAt = input.now || new Date().toISOString();
+  const file = await writeProductGrounding(projectRoot, model);
+  return { model, feature: model.features[featureId], path: file };
+}
+
+export async function revertProductFeatureCorrection(projectRoot, input = {}) {
+  const model = await readProductGrounding(projectRoot);
+  const featureId = String(input.featureId || input.feature_id || "");
+  const feature = model.features[featureId];
+  if (!feature) throw new NotFoundError(`Feature not found: ${featureId}`, { featureId });
+  const expectedVersion = Number(input.expectedVersion ?? input.expected_version);
+  if (expectedVersion !== feature.version) throw new ConflictError("Feature version is stale.", { featureId, expectedVersion, actualVersion: feature.version });
+  if (!model.humanIntent?.featureCorrections?.[featureId]) throw new ValidationError("Feature has no Human Intent correction to revert.", { featureId });
+  const result = await scanProductGrounding(projectRoot, { skipHumanIntentFeatureIds: [featureId], now: input.now });
+  return { ...result, revertedFeatureId: featureId, feature: result.model.features[featureId] };
 }
 
 export async function correctProductFeature(projectRoot, input = {}) {

@@ -35,7 +35,7 @@ const ENTITY_DEFAULTS = Object.freeze({
   handoffs: { status: "open", taskIds: [], artifactIds: [], boardIds: [], metadata: {} },
   messages: { kind: "update", toAgentId: null, channel: "workspace", relatedEntityRefs: [], readBy: [] },
   selections: { elementIds: [] },
-  changes: { status: "draft", intent: "", featureId: null, contract: {}, desiredState: {}, acceptanceCriteria: [], constraints: [], relatedEntityRefs: [] },
+  changes: { status: "draft", intent: "", featureId: null, targetFeatureIds: [], baseline: null, contract: {}, desiredState: {}, acceptanceCriteria: [], constraints: [], relatedEntityRefs: [] },
   executions: { status: "queued", changeId: null, agentId: null, adapterId: null, input: {}, output: {}, error: null, lifecycle: [], repoBefore: null, repoAfter: null, repoChange: null },
 });
 
