@@ -32,6 +32,8 @@ import {
   summarizeProductMap,
   syncAgent,
   updateHandoff,
+  observeProjectState,
+  compareDesiredObserved,
   workspacePaths,
 } from "../core/index.mjs";
 import { exportSemanticBoard } from "../export/semantic-export.mjs";
@@ -310,6 +312,20 @@ export const workspaceTools = [
     annotations: mutating,
   },
   {
+    name: "verification_observe",
+    title: "Observe Real Repository State",
+    description: "Freshly observe the current repository into a deterministic, product-level state. This never reads Agent execution prose as Code Truth.",
+    inputSchema: { type: "object", properties: { project_root: { type: "string" }, base_revision: { type: "string" } }, required: ["project_root"], additionalProperties: false },
+    annotations: readOnly,
+  },
+  {
+    name: "verification_compare",
+    title: "Compare Desired and Observed State",
+    description: "Re-observe the real repository, compare it with an approved Desired State, and return a product-level Semantic Diff plus verification evidence associations.",
+    inputSchema: { type: "object", properties: { project_root: { type: "string" }, desired_state: { type: "object" }, base_revision: { type: "string" }, verification_evidence: { type: "array", items: { type: "object" } } }, required: ["project_root", "desired_state"], additionalProperties: false },
+    annotations: readOnly,
+  },
+  {
     name: "change_create",
     title: "Create a Change Contract",
     description: "Create a versioned Desired Change. Execution can start only after the Change status is explicitly approved.",
@@ -524,6 +540,14 @@ export async function callWorkspaceTool(name, args, httpService) {
   if (name === "product_feature_correct") {
     const result = await correctProductFeature(args.project_root, { featureId: args.feature_id, expectedVersion: args.expected_version, patch: args.patch, reason: args.reason, actor: args.actor });
     return content(`Feature “${result.feature.name}” corrected as Human Intent at v${result.feature.version}.`, { feature: result.feature, correction: result.correction, productMap: summarizeProductMap(result.model), path: result.path });
+  }
+  if (name === "verification_observe") {
+    const observed = await observeProjectState(args.project_root, { baseRevision: args.base_revision });
+    return content(`Observed repository state at ${observed.repo.revision || "no-git-revision"}.`, { observed });
+  }
+  if (name === "verification_compare") {
+    const result = await compareDesiredObserved(args.project_root, args.desired_state, undefined, { baseRevision: args.base_revision, verificationEvidence: args.verification_evidence });
+    return content(`Semantic verification is ${result.status}.`, result);
   }
   if (name === "change_create") {
     const result = await createChange(args.project_root, args.change, args.actor);

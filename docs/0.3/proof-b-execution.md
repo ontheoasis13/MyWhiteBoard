@@ -18,7 +18,7 @@ Proof A 的层级修正已在独立提交 `637c7b4` 完成，并保留原始 Pro
 - `execution_stop` 和 `execution_resume` 保留中断状态，并通过 `parentExecutionId` 建立续跑链路。
 - `execution_claim` 允许已经运行中的外部 MCP Agent Host 接手 approved Change；`execution_report` 允许该 Host 报告 `running / interrupted / failed / completed / cancelled`，并由 MCP 边界捕获 Repo 执行后证据。
 - 0.2 Workspace 读取时会补齐新集合，旧工作区不需要破坏式迁移；首次写入后新状态持久化到同一份 `workspace.json` 与 Event Log。
-- MCP 新增 `change_create`、`change_get`、`execution_capabilities`、`execution_start`、`execution_claim`、`execution_report`、`execution_get`、`execution_stop`、`execution_resume`，当前工具总数为 40。
+- Proof B 验收时 MCP 新增 `change_create`、`change_get`、`execution_capabilities`、`execution_start`、`execution_claim`、`execution_report`、`execution_get`、`execution_stop`、`execution_resume`，工具总数为 40。
 
 ## 已通过的本地技术门禁
 

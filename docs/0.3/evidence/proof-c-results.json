@@ -1,0 +1,61 @@
+{
+  "proof": "C",
+  "title": "Verification",
+  "status": "pass",
+  "toolCountAtProofBAcceptance": 40,
+  "toolCountCurrent": 42,
+  "implementation": {
+    "observedState": "core/verification.mjs",
+    "mcpTools": ["verification_observe", "verification_compare"],
+    "sourceAuthority": "fresh-repo-observation",
+    "completionAuthority": "semantic-diff",
+    "executionReportUsedForCompletion": false
+  },
+  "caseA": {
+    "changeId": "change-proof-b-health-endpoint",
+    "workspaceVersion": 8,
+    "baseRevision": "3550be483b271199f6a71f1a2b2407849cb34880",
+    "observedRevision": "3550be483b271199f6a71f1a2b2407849cb34880",
+    "status": "pass",
+    "completion": "completed",
+    "changedFiles": ["src/server.js", "test/server.test.js"],
+    "semanticDiff": [
+      { "id": "endpoint:GET /api/health", "category": "requested", "status": "added", "evidence": [{ "type": "source", "source": "src/server.js", "line": 10 }] },
+      { "id": "endpoint:GET /api/health:test", "category": "verification", "status": "verified", "evidence": [{ "type": "test", "source": "test/server.test.js" }] },
+      { "id": "protected:GET /api/status", "category": "protected", "status": "unchanged", "evidence": [{ "type": "baseline", "source": "src/server.js", "line": 5 }, { "type": "source", "source": "src/server.js", "line": 5 }] },
+      { "id": "runtime-dependencies", "category": "scope", "status": "unchanged", "evidence": [{ "type": "package", "source": "package.json" }] },
+      { "id": "verification-0", "category": "verification", "status": "verified", "evidence": [{ "type": "command", "command": "npm test", "source": "Codex independent run" }] }
+    ],
+    "verificationEvidence": [
+      { "id": "validation-npm-test", "command": "npm test", "status": "passed", "source": "Codex independent run" },
+      { "id": "validation-typecheck", "command": "npm run typecheck", "status": "passed", "source": "Codex independent run" },
+      { "id": "my-whiteboard-build", "command": "npm run build", "status": "passed", "source": "Codex plugin build" },
+      { "id": "my-whiteboard-mcp-smoke", "command": "node scripts/smoke-test.mjs", "status": "passed", "source": "Codex MCP smoke", "toolCount": 42 }
+    ]
+  },
+  "caseB": {
+    "fixture": "controlled temporary Repo",
+    "status": "incomplete",
+    "completion": "incomplete",
+    "missing": ["endpoint:GET /api/health:test"]
+  },
+  "caseC": {
+    "fixture": "controlled temporary Repo",
+    "status": "unexpected",
+    "completion": "incomplete",
+    "unexpected": ["protected:GET /api/status"]
+  },
+  "gate": {
+    "realProofBRepoReobserved": true,
+    "requestedChangeRecognized": true,
+    "protectedBehaviorUnchangedRecognized": true,
+    "verificationEvidenceAssociated": true,
+    "missingRecognized": true,
+    "unexpectedRecognized": true,
+    "agentDoneDeclarationRequired": false,
+    "tests": "45/45 passed",
+    "typecheck": "passed",
+    "build": "passed",
+    "mcpSmoke": "passed (42 tools)"
+  }
+}

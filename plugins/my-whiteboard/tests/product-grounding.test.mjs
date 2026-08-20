@@ -97,7 +97,7 @@ test("grounds Features to deterministic Evidence and preserves Human Intent acro
 
 test("exposes Product Grounding through the Agent-neutral MCP boundary", async () => {
   const root = await fixtureCopy();
-  assert.equal(workspaceTools.length, 40);
+  assert.equal(workspaceTools.length, 42);
 
   const scanned = await callWorkspaceTool("product_grounding_scan", { project_root: root, max_files: 100 });
   const billing = scanned.structuredContent.model.features["feature-billing"];

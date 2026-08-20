@@ -47,7 +47,9 @@ try {
   const initialized = await request("initialize", { protocolVersion: "2025-11-25", capabilities: {} });
   assert(initialized.result?.serverInfo?.name === "My Whiteboard Workspace", "initialize failed");
   const listed = await request("tools/list");
-  assert(listed.result.tools.length === 40, "unexpected workspace tool count");
+  assert(listed.result.tools.length === 42, "unexpected workspace tool count");
+  assert(listed.result.tools.some((tool) => tool.name === "verification_observe"), "verification observe tool missing");
+  assert(listed.result.tools.some((tool) => tool.name === "verification_compare"), "verification compare tool missing");
   assert(listed.result.tools.every((tool) => !tool._meta?.["openai/outputTemplate"]), "iframe output template remains");
   const project = await request("tools/call", { name: "project_create", arguments: { project_root: projectRoot, name: "Smoke Project", actor: { id: "codex", client: "codex" } } });
   assert(project.result.structuredContent.workspaceVersion === 1, "project creation failed");
@@ -101,6 +103,10 @@ const synchronized = await request("tools/call", {
   assert(correctedFeature.result.structuredContent.feature.version === 2, "Human Intent correction failed");
   const grounded = await request("tools/call", { name: "product_grounding_get", arguments: { project_root: projectRoot, include_evidence: false } });
   assert(grounded.result.structuredContent.productMap.features.some((item) => item.id === answerFeature.id && item.name === "Answers"), "Product Map read failed");
+  const observed = await request("tools/call", { name: "verification_observe", arguments: { project_root: projectRoot } });
+  assert(observed.result.structuredContent.observed.source === "fresh-repo-observation", "verification observation failed");
+  const comparison = await request("tools/call", { name: "verification_compare", arguments: { project_root: projectRoot, desired_state: { id: "smoke-verification", behaviors: [] } } });
+  assert(comparison.result.structuredContent.status === "pass", "verification comparison failed");
   const executionAgent = path.join(projectRoot, "smoke-agent.mjs");
   await writeFile(executionAgent, "import { writeFile } from 'node:fs/promises';\nawait writeFile(process.env.MY_WHITEBOARD_REPO_ROOT + '/smoke-agent-output.txt', process.env.MY_WHITEBOARD_CHANGE_ID);\n", "utf8");
   const change = await request("tools/call", { name: "change_create", arguments: { project_root: projectRoot, change: { id: "smoke-change", title: "Smoke Change", intent: "Run a real process", status: "approved", contract: { files: ["smoke-agent-output.txt"] }, acceptanceCriteria: ["output file exists"] }, actor: { id: "human", client: "smoke" } } });

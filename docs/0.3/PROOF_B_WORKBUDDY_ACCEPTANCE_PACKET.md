@@ -33,7 +33,7 @@
 
 ## WorkBuddy 需要调用的 MCP 工具
 
-请先重载已信任的 `my-whiteboard` MCP 连接，使工具列表包含最新的 Hosted Execution 工具（总数 40）：
+请先重载已信任的 `my-whiteboard` MCP 连接，使工具列表包含 Proof B 所需的 Hosted Execution 工具（Proof B 验收时总数 40）：
 
 1. `mcp__my-whiteboard__agent_sync`
 2. `mcp__my-whiteboard__workspace_get` 或 `mcp__my-whiteboard__change_get`

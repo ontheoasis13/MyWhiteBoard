@@ -8,3 +8,4 @@ export * from "./product-grounding.mjs";
 export * from "./domain.mjs";
 export * from "./collaboration.mjs";
 export * from "./execution.mjs";
+export * from "./verification.mjs";
