@@ -7,7 +7,7 @@
 ## Validation Repo
 
 - 路径：`C:\Users\NCKZ\Documents\New project 2\proof-b-validation`
-- 基线 Git Revision：`3550be483b271199f6a71f2a1b2407849cb34880`
+- 基线 Git Revision：`3550be483b271199f6a71f1a2b2407849cb34880`
 - 当前 My Whiteboard Workspace Version：`3`
 - Agent ID：`proof-b-external-host`
 - Change ID：`change-proof-b-health-endpoint`
@@ -70,7 +70,7 @@ C:\Users\NCKZ\Documents\New project 2\proof-b-validation
 - `Execution.changeId` 与 `change-proof-b-health-endpoint` 一致。
 - `Execution.agentId` 与 `proof-b-external-host` 一致。
 - lifecycle 至少包含 `claimed`、`started`、`running` 和最终状态。
-- `repoBefore.revision` 等于基线 `3550be483b271199f6a71f2a1b2407849cb34880`。
+- `repoBefore.revision` 等于基线 `3550be483b271199f6a71f1a2b2407849cb34880`。
 - `repoAfter`、`repoChange.files` 和 revision 证据已持久化；变更范围符合 Contract。
 - 重新读取 `src/server.js`、`test/server.test.js`，确认 `/api/health` 行为真实存在。
 - 在同一 Repo 独立运行 `npm test`、`npm run typecheck`，并检查 Git diff 没有额外产品范围。
