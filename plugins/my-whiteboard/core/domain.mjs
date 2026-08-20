@@ -2,13 +2,14 @@ import { applyWorkspaceTransaction, readWorkspace } from "./store.mjs";
 import { clone } from "./schema.mjs";
 import { ValidationError } from "./errors.mjs";
 
-export const DOMAIN_COLLECTIONS = Object.freeze(["contexts", "tasks", "decisions", "artifacts"]);
+export const DOMAIN_COLLECTIONS = Object.freeze(["contexts", "tasks", "decisions", "artifacts", "changes"]);
 
 const DEFAULTS = {
   contexts: { kind: "project", title: "Context", content: "", sources: [], tags: [] },
   tasks: { title: "Task", status: "todo", priority: "medium", description: "", dependsOn: [], assigneeAgentId: null, boardElementIds: [] },
   decisions: { title: "Decision", status: "proposed", rationale: "", alternatives: [], boardElementIds: [] },
   artifacts: { title: "Artifact", kind: "file", status: "current", path: null, uri: null, boardId: null, metadata: {} },
+  changes: { title: "Change", status: "draft", intent: "", featureId: null, contract: {}, desiredState: {}, acceptanceCriteria: [], constraints: [], relatedEntityRefs: [] },
 };
 
 function createEntity(collection, input) {

@@ -6,6 +6,7 @@ import {
   ENTITY_COLLECTIONS,
   clone,
   createWorkspaceDocument,
+  migrateWorkspaceDocument,
   normalizeActor,
   normalizeBoardElement,
   normalizeEntity,
@@ -96,7 +97,7 @@ async function atomicWriteJson(file, value) {
 
 async function readWorkspaceFile(file) {
   try {
-    return validateWorkspace(JSON.parse(await readFile(file, "utf8")));
+    return validateWorkspace(migrateWorkspaceDocument(JSON.parse(await readFile(file, "utf8"))));
   } catch (error) {
     if (error?.code === "ENOENT") throw new NotFoundError("My Whiteboard project has not been initialized.", { file });
     throw error;

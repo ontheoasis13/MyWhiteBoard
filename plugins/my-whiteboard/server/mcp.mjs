@@ -12,6 +12,13 @@ import {
   createProjectCodeBoard,
   createProjectWorkspace,
   correctProductFeature,
+  createChange,
+  executionCapabilities,
+  getChange,
+  getExecution,
+  resumeExecution,
+  startExecution,
+  stopExecution,
   discoverLegacyBoards,
   getChangesSince,
   getMessages,
@@ -73,6 +80,8 @@ const boardChangeSchema = {
 };
 const handoffSchema = { type: "object", properties: { id: { type: "string" }, title: { type: "string" }, summary: { type: "string" }, fromAgentId: { type: "string" }, toAgentId: { type: "string" }, status: { type: "string", enum: ["open", "accepted", "completed", "cancelled"] }, taskIds: { type: "array", items: { type: "string" } }, artifactIds: { type: "array", items: { type: "string" } }, boardIds: { type: "array", items: { type: "string" } }, metadata: { type: "object" } }, required: ["title", "summary", "fromAgentId", "toAgentId"], additionalProperties: false };
 const messageSchema = { type: "object", properties: { id: { type: "string" }, fromAgentId: { type: "string" }, toAgentId: { type: ["string", "null"] }, channel: { type: "string" }, kind: { type: "string", enum: ["update", "request", "response", "conflict", "system"] }, body: { type: "string" }, relatedEntityRefs: { type: "array", items: { type: "object", properties: { collection: { type: "string" }, id: { type: "string" } }, required: ["collection", "id"], additionalProperties: false } }, readBy: { type: "array", items: { type: "string" } } }, required: ["fromAgentId", "body"], additionalProperties: false };
+const changeEntitySchema = { type: "object", properties: { id: { type: "string" }, title: { type: "string" }, featureId: { type: ["string", "null"] }, intent: { type: "string" }, status: { type: "string", enum: ["draft", "approved", "executing", "completed", "interrupted", "failed", "cancelled"] }, contract: { type: "object" }, desiredState: { type: "object" }, acceptanceCriteria: { type: "array", items: { type: "string" } }, constraints: { type: "array", items: { type: "string" } }, relatedEntityRefs: { type: "array", items: { type: "object" } } }, additionalProperties: true };
+const executionAdapterSchema = { type: "object", properties: { kind: { type: "string", enum: ["process"] }, adapterId: { type: "string" }, command: { type: "string" }, args: { type: "array", items: { type: "string" } }, env: { type: "object" } }, required: ["command"], additionalProperties: false };
 
 export const workspaceTools = [
   {
@@ -298,6 +307,55 @@ export const workspaceTools = [
     annotations: mutating,
   },
   {
+    name: "change_create",
+    title: "Create a Change Contract",
+    description: "Create a versioned Desired Change. Execution can start only after the Change status is explicitly approved.",
+    inputSchema: { type: "object", properties: { project_root: { type: "string" }, change: changeEntitySchema, actor: actorSchema }, required: ["project_root", "change"], additionalProperties: false },
+    annotations: mutating,
+  },
+  {
+    name: "change_get",
+    title: "Read a Change Contract",
+    description: "Read the approved Change intent, contract, Desired State, and current Entity Version.",
+    inputSchema: { type: "object", properties: { project_root: { type: "string" }, change_id: { type: "string" } }, required: ["project_root", "change_id"], additionalProperties: false },
+    annotations: readOnly,
+  },
+  {
+    name: "execution_capabilities",
+    title: "Inspect Agent Execution Adapter",
+    description: "Report lifecycle and control capabilities for a concrete Agent-neutral execution adapter without starting work.",
+    inputSchema: { type: "object", properties: { adapter: executionAdapterSchema }, required: ["adapter"], additionalProperties: false },
+    annotations: readOnly,
+  },
+  {
+    name: "execution_start",
+    title: "Start Real Agent Execution",
+    description: "Start a real configured Agent process for an approved Change, persist lifecycle signals, and capture repository state before and after execution.",
+    inputSchema: { type: "object", properties: { project_root: { type: "string" }, change_id: { type: "string" }, agent_id: { type: "string" }, adapter: executionAdapterSchema, actor: actorSchema }, required: ["project_root", "change_id", "agent_id", "adapter"], additionalProperties: false },
+    annotations: mutating,
+  },
+  {
+    name: "execution_get",
+    title: "Read Agent Execution",
+    description: "Read durable Execution lifecycle, Change linkage, output, errors, and repository change evidence.",
+    inputSchema: { type: "object", properties: { project_root: { type: "string" }, execution_id: { type: "string" } }, required: ["project_root", "execution_id"], additionalProperties: false },
+    annotations: readOnly,
+  },
+  {
+    name: "execution_stop",
+    title: "Stop Agent Execution",
+    description: "Request a running Agent process to stop and persist an interrupted lifecycle state.",
+    inputSchema: { type: "object", properties: { project_root: { type: "string" }, execution_id: { type: "string" }, actor: actorSchema }, required: ["project_root", "execution_id"], additionalProperties: false },
+    annotations: mutating,
+  },
+  {
+    name: "execution_resume",
+    title: "Resume Agent Execution",
+    description: "Resume an interrupted or failed Execution with a new linked Execution ID and the persisted Change Contract.",
+    inputSchema: { type: "object", properties: { project_root: { type: "string" }, execution_id: { type: "string" }, actor: actorSchema }, required: ["project_root", "execution_id"], additionalProperties: false },
+    annotations: mutating,
+  },
+  {
     name: "board_export",
     title: "Export Semantic Board",
     description: "Export the authoritative Semantic Board as JSON, SVG, or PNG under .my-whiteboard/exports.",
@@ -449,6 +507,34 @@ export async function callWorkspaceTool(name, args, httpService) {
   if (name === "product_feature_correct") {
     const result = await correctProductFeature(args.project_root, { featureId: args.feature_id, expectedVersion: args.expected_version, patch: args.patch, reason: args.reason, actor: args.actor });
     return content(`Feature “${result.feature.name}” corrected as Human Intent at v${result.feature.version}.`, { feature: result.feature, correction: result.correction, productMap: summarizeProductMap(result.model), path: result.path });
+  }
+  if (name === "change_create") {
+    const result = await createChange(args.project_root, args.change, args.actor);
+    return content(`Created Change Contract “${result.change.title}” at v${result.change.version}.`, { change: result.change, workspaceVersion: result.workspaceVersion, events: result.events });
+  }
+  if (name === "change_get") {
+    const result = await getChange(args.project_root, args.change_id);
+    return content(`Change Contract “${result.change.title}” is ${result.change.status}.`, result);
+  }
+  if (name === "execution_capabilities") {
+    const result = await executionCapabilities(args.adapter);
+    return content(`Execution adapter “${result.capabilities.adapterId}” inspected.`, result);
+  }
+  if (name === "execution_start") {
+    const result = await startExecution(args.project_root, { changeId: args.change_id, agentId: args.agent_id, adapter: args.adapter, actor: args.actor });
+    return content(`Execution “${result.execution.id}” is ${result.execution.status}.`, result);
+  }
+  if (name === "execution_get") {
+    const result = await getExecution(args.project_root, args.execution_id);
+    return content(`Execution “${result.execution.id}” is ${result.execution.status}.`, result);
+  }
+  if (name === "execution_stop") {
+    const result = await stopExecution(args.project_root, args.execution_id, args.actor);
+    return content(`Execution “${result.execution.id}” stop requested.`, result);
+  }
+  if (name === "execution_resume") {
+    const result = await resumeExecution(args.project_root, args.execution_id, args.actor);
+    return content(`Execution “${result.execution.id}” resumed from ${args.execution_id}.`, result);
   }
   if (name === "board_export") {
     const workspace = await readWorkspace(args.project_root);

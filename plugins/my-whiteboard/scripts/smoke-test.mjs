@@ -47,7 +47,7 @@ try {
   const initialized = await request("initialize", { protocolVersion: "2025-11-25", capabilities: {} });
   assert(initialized.result?.serverInfo?.name === "My Whiteboard Workspace", "initialize failed");
   const listed = await request("tools/list");
-  assert(listed.result.tools.length === 31, "unexpected workspace tool count");
+  assert(listed.result.tools.length === 38, "unexpected workspace tool count");
   assert(listed.result.tools.every((tool) => !tool._meta?.["openai/outputTemplate"]), "iframe output template remains");
   const project = await request("tools/call", { name: "project_create", arguments: { project_root: projectRoot, name: "Smoke Project", actor: { id: "codex", client: "codex" } } });
   assert(project.result.structuredContent.workspaceVersion === 1, "project creation failed");
@@ -101,6 +101,21 @@ const synchronized = await request("tools/call", {
   assert(correctedFeature.result.structuredContent.feature.version === 2, "Human Intent correction failed");
   const grounded = await request("tools/call", { name: "product_grounding_get", arguments: { project_root: projectRoot, include_evidence: false } });
   assert(grounded.result.structuredContent.productMap.features.some((item) => item.id === answerFeature.id && item.name === "Answers"), "Product Map read failed");
+  const executionAgent = path.join(projectRoot, "smoke-agent.mjs");
+  await writeFile(executionAgent, "import { writeFile } from 'node:fs/promises';\nawait writeFile(process.env.MY_WHITEBOARD_REPO_ROOT + '/smoke-agent-output.txt', process.env.MY_WHITEBOARD_CHANGE_ID);\n", "utf8");
+  const change = await request("tools/call", { name: "change_create", arguments: { project_root: projectRoot, change: { id: "smoke-change", title: "Smoke Change", intent: "Run a real process", status: "approved", contract: { files: ["smoke-agent-output.txt"] }, acceptanceCriteria: ["output file exists"] }, actor: { id: "human", client: "smoke" } } });
+  assert(change.result.structuredContent.change.status === "approved", "Change Contract creation failed");
+  const capabilities = await request("tools/call", { name: "execution_capabilities", arguments: { adapter: { kind: "process", adapterId: "smoke-process", command: process.execPath, args: [executionAgent] } } });
+  assert(capabilities.result.structuredContent.capabilities.supports.repoChangeCapture === true, "Execution capabilities failed");
+  const startedExecution = await request("tools/call", { name: "execution_start", arguments: { project_root: projectRoot, change_id: "smoke-change", agent_id: "codex", adapter: { kind: "process", adapterId: "smoke-process", command: process.execPath, args: [executionAgent] }, actor: { id: "codex", client: "smoke" } } });
+  assert(["running", "completed"].includes(startedExecution.result.structuredContent.execution.status), "Execution did not start");
+  let execution = startedExecution.result.structuredContent.execution;
+  for (let attempt = 0; attempt < 100 && !["completed", "failed", "interrupted"].includes(execution.status); attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    const currentExecution = await request("tools/call", { name: "execution_get", arguments: { project_root: projectRoot, execution_id: execution.id } });
+    execution = currentExecution.result.structuredContent.execution;
+  }
+  assert(execution.status === "completed", "Execution did not complete");
   const delta = await request("tools/call", { name: "workspace_get_changes", arguments: { project_root: projectRoot, since_version: 1 } });
   assert(delta.result.structuredContent.events.length >= 3, "workspace delta failed");
   const deltaText = parseTextFallback(delta.result);

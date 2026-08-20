@@ -13,6 +13,8 @@ export const ENTITY_COLLECTIONS = Object.freeze([
   "handoffs",
   "messages",
   "selections",
+  "changes",
+  "executions",
 ]);
 
 export const BOARD_KINDS = new Set(["node", "edge", "text", "note", "group", "section"]);
@@ -21,6 +23,8 @@ export const DECISION_STATUSES = new Set(["proposed", "accepted", "rejected", "s
 export const AGENT_STATUSES = new Set(["connected", "idle", "working", "offline", "error"]);
 export const HANDOFF_STATUSES = new Set(["open", "accepted", "completed", "cancelled"]);
 export const MESSAGE_KINDS = new Set(["update", "request", "response", "conflict", "system"]);
+export const CHANGE_STATUSES = new Set(["draft", "approved", "executing", "completed", "interrupted", "failed", "cancelled"]);
+export const EXECUTION_STATUSES = new Set(["queued", "running", "completed", "interrupted", "failed", "cancelled"]);
 
 const ENTITY_DEFAULTS = Object.freeze({
   contexts: { kind: "project", title: "Context", content: "", sources: [], tags: [] },
@@ -31,6 +35,8 @@ const ENTITY_DEFAULTS = Object.freeze({
   handoffs: { status: "open", taskIds: [], artifactIds: [], boardIds: [], metadata: {} },
   messages: { kind: "update", toAgentId: null, channel: "workspace", relatedEntityRefs: [], readBy: [] },
   selections: { elementIds: [] },
+  changes: { status: "draft", intent: "", featureId: null, contract: {}, desiredState: {}, acceptanceCriteria: [], constraints: [], relatedEntityRefs: [] },
+  executions: { status: "queued", changeId: null, agentId: null, adapterId: null, input: {}, output: {}, error: null, lifecycle: [], repoBefore: null, repoAfter: null, repoChange: null },
 });
 
 export function timestamp() {
@@ -50,6 +56,18 @@ export function slug(value, fallback = "project") {
 
 export function clone(value) {
   return structuredClone(value);
+}
+
+/**
+ * Add collections introduced after Workspace schema v2 without changing the
+ * schema version. This keeps existing 0.2 workspaces readable and makes the
+ * migration explicit instead of silently dropping execution state.
+ */
+export function migrateWorkspaceDocument(input) {
+  const workspace = clone(input);
+  workspace.entities ||= {};
+  for (const collection of ENTITY_COLLECTIONS) workspace.entities[collection] ||= {};
+  return workspace;
 }
 
 export function createWorkspaceDocument({ projectRoot, name, projectId, actor = "system" }) {
@@ -233,6 +251,20 @@ export function validateDomainEntity(collection, entity, workspace) {
   if (collection === "selections") {
     requireText(entity, "boardId", collection);
     requireStringArray(entity, "elementIds", collection);
+  }
+  if (collection === "changes") {
+    requireText(entity, "title", collection);
+    if (!CHANGE_STATUSES.has(entity.status)) throw new ValidationError(`Invalid Change status: ${entity.status}`, { entityId: entity.id });
+    if (!entity.contract || typeof entity.contract !== "object" || Array.isArray(entity.contract)) throw new ValidationError("Change contract must be an object.", { entityId: entity.id });
+    if (!Array.isArray(entity.acceptanceCriteria) || entity.acceptanceCriteria.some((value) => typeof value !== "string")) throw new ValidationError("Change acceptanceCriteria must be an array of strings.", { entityId: entity.id });
+    if (!Array.isArray(entity.constraints) || entity.constraints.some((value) => typeof value !== "string")) throw new ValidationError("Change constraints must be an array of strings.", { entityId: entity.id });
+  }
+  if (collection === "executions") {
+    requireText(entity, "changeId", collection);
+    requireText(entity, "agentId", collection);
+    requireText(entity, "adapterId", collection);
+    if (!EXECUTION_STATUSES.has(entity.status)) throw new ValidationError(`Invalid Execution status: ${entity.status}`, { entityId: entity.id });
+    if (!Array.isArray(entity.lifecycle)) throw new ValidationError("Execution lifecycle must be an array.", { entityId: entity.id });
   }
   return entity;
 }
