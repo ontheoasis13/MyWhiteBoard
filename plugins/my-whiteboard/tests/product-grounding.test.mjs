@@ -51,9 +51,17 @@ test("grounds Features to deterministic Evidence and preserves Human Intent acro
   const feature = first.model.features["feature-billing"];
 
   assert.ok(feature);
-  assert.equal(feature.actionability, "grounded");
+  assert.equal(feature.actionability, "ACTIONABLE");
+  assert.equal(first.model.modelType, "ProjectModel");
+  assert.equal(first.model.projectModelVersion, 1);
+  assert.equal(first.model.repoSnapshot.dirty, false);
+  assert.ok(first.model.productMapProjection);
   assert.ok(feature.groundingRefs.length >= 3);
   assert.ok(feature.groundingRefs.every((id) => first.model.evidence[id]));
+  const firstEvidence = first.model.evidence[feature.groundingRefs[0]];
+  assert.equal(firstEvidence.evidenceVersion, 1);
+  assert.ok(firstEvidence.repoSnapshotId);
+  assert.ok(firstEvidence.provenance);
   assert.ok(feature.groundingRefs.some((id) => first.model.evidence[id].certainty === "confirmed"));
   assert.ok(feature.groundingRefs.some((id) => first.model.evidence[id].type === "semantic_inference" && first.model.evidence[id].certainty === "possible"));
   assert.equal(first.model.productHierarchy.levels, 2);

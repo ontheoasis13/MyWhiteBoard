@@ -1,0 +1,33 @@
+{
+  "phase": "1",
+  "title": "Living Project Model v1",
+  "status": "pass",
+  "proofBaseline": {
+    "proofA": "pass",
+    "proofB": "pass",
+    "proofC": "pass",
+    "commit": "8f7213990982b33c71e05445fa39013ca1ed83df"
+  },
+  "model": {
+    "modelType": "ProjectModel",
+    "projectModelVersion": 1,
+    "repoSnapshotFields": ["headRevision", "dirty", "workingTreeFingerprint", "changedFiles", "capturedAt"],
+    "evidenceSchemaVersion": 1,
+    "actionabilityStates": ["UNDERSTOOD", "GROUNDED", "ACTIONABLE", "EXECUTABLE"],
+    "projection": "Product Map Projection with visualLayout separated"
+  },
+  "gate": {
+    "legacyWorkspaceRead": "pass",
+    "productModelMigration": "pass",
+    "humanCorrectionRestartRescan": "pass",
+    "headUnchangedWorkingTreeChanged": "pass",
+    "actionabilityFreshness": "pass",
+    "visualLayoutPreserved": "pass",
+    "proofRegression": "pass",
+    "tests": "49/49 passed",
+    "typecheck": "pass",
+    "build": "pass",
+    "mcpSmoke": "pass (42 tools)"
+  },
+  "outOfScope": ["Phase 2 Product-first UI", "Visual Proposal", "Impact UI", "Execution Dashboard", "Verification UI", "User Flow", "Tauri", "Cloud expansion", "Production deployment"]
+}

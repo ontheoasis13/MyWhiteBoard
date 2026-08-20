@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import { scanProjectSources } from "./source-observation.mjs";
+import { captureRepoSnapshot } from "./project-model.mjs";
 
 const execFileAsync = promisify(execFile);
 const VERIFICATION_SCHEMA_VERSION = 1;
@@ -136,15 +137,12 @@ export async function observeProjectState(projectRoot, options = {}) {
   const files = scanned.files.map((file) => ({ relative: file.relative, sourceHash: file.sourceHash, bytes: Buffer.byteLength(file.source, "utf8") }));
   const endpoints = scanned.files.flatMap((file) => extractEndpointsFromSource(file.source, file.relative));
   const tests = scanned.files.map((file) => extractTestEvidence(file.source, file.relative)).filter(Boolean);
-  const revision = await gitRevision(root);
+  const observedAt = options.observedAt || new Date().toISOString();
+  const repoSnapshot = await captureRepoSnapshot(root, scanned.files, observedAt);
   return {
     schemaVersion: VERIFICATION_SCHEMA_VERSION,
-    repo: {
-      root,
-      revision,
-      changedFiles: await gitChangedFiles(root, options.baseRevision || revision),
-      observedAt: options.observedAt || new Date().toISOString(),
-    },
+    repoSnapshot,
+    repo: { root, revision: repoSnapshot.headRevision, changedFiles: repoSnapshot.changedFiles, observedAt: repoSnapshot.capturedAt },
     files,
     endpoints,
     tests,
@@ -232,7 +230,7 @@ function verificationResult(evidence, command) {
 export async function compareDesiredObserved(projectRoot, desiredInput, observed, options = {}) {
   const desired = desiredStateFromChange(desiredInput);
   const actual = observed || await observeProjectState(projectRoot, { baseRevision: options.baseRevision });
-  const baseRevision = options.baseRevision || actual.repo.revision;
+  const baseRevision = options.baseRevision || actual.repoSnapshot?.headRevision || actual.repo.revision;
   const baseline = await baselineEndpoints(projectRoot, actual, desired, baseRevision);
   const diffs = [];
   for (const behavior of desired.behaviors) {
@@ -250,7 +248,7 @@ export async function compareDesiredObserved(projectRoot, desiredInput, observed
       status: matches ? (wasPresent ? "unchanged" : "added") : "missing",
       desired: { method: behavior.method, route: behavior.route, response: behavior.response || null },
       observed: current,
-      evidence: current ? [{ type: "source", source: current.source, line: current.line }] : [],
+      evidence: current ? [{ type: "source", source: current.source, line: current.line, repoSnapshotId: actual.repoSnapshot?.workingTreeFingerprint }] : [],
     });
     const test = actual.tests.find((item) => item.routes.includes(behavior.route));
     diffs.push({
@@ -260,7 +258,7 @@ export async function compareDesiredObserved(projectRoot, desiredInput, observed
       status: matches && test && test.hasHttp200Assertion && test.hasJsonAssertion ? "verified" : "missing",
       desired: { testFor: behavior.route },
       observed: test,
-      evidence: test ? [{ type: "test", source: test.source }] : [],
+      evidence: test ? [{ type: "test", source: test.source, repoSnapshotId: actual.repoSnapshot?.workingTreeFingerprint }] : [],
     });
   }
   for (const behavior of desired.protectedBehaviors) {
@@ -274,7 +272,7 @@ export async function compareDesiredObserved(projectRoot, desiredInput, observed
       status: unchanged ? "unchanged" : "unexpected",
       desired: { method: behavior.method, route: behavior.route, response: before?.response || null },
       observed: current,
-      evidence: [before && { type: "baseline", source: before.source, line: before.line }, current && { type: "source", source: current.source, line: current.line }].filter(Boolean),
+      evidence: [before && { type: "baseline", source: before.source, line: before.line, baselineRevision: baseRevision }, current && { type: "source", source: current.source, line: current.line, repoSnapshotId: actual.repoSnapshot?.workingTreeFingerprint }].filter(Boolean),
     });
   }
   const changedFiles = actual.repo.changedFiles;

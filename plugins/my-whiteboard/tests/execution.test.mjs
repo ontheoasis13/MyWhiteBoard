@@ -69,6 +69,10 @@ test("starts a real process for an approved Change and persists repo evidence", 
   assert.match(await readFile(path.join(projectRoot, "README.md"), "utf8"), /agent-change/);
   assert.equal(completed.repoAfter.available, true);
   assert.equal(completed.repoChange.files.includes("README.md"), true);
+  assert.equal(completed.repoBefore.headRevision, completed.repoBefore.revision);
+  assert.equal(typeof completed.repoBefore.workingTreeFingerprint, "string");
+  assert.equal(Array.isArray(completed.repoBefore.changedFiles), true);
+  assert.equal(typeof completed.repoAfter.dirty, "boolean");
   assert.equal((await getExecution(projectRoot, completed.id)).execution.status, "completed");
 });
 

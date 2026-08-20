@@ -6,6 +6,7 @@ import { randomUUID } from "node:crypto";
 import { applyWorkspaceTransaction, readWorkspace, workspacePaths } from "./store.mjs";
 import { clone, timestamp } from "./schema.mjs";
 import { NotFoundError, ValidationError } from "./errors.mjs";
+import { captureRepoSnapshot } from "./project-model.mjs";
 
 const execFileAsync = promisify(execFile);
 const processHandles = new Map();
@@ -89,10 +90,14 @@ async function gitCommand(projectRoot, args) {
 export async function repoSnapshot(projectRoot) {
   const revision = await gitCommand(projectRoot, ["rev-parse", "HEAD"]);
   const status = await gitCommand(projectRoot, ["status", "--short"]);
-  const files = status
-    ? status.split(/\r?\n/).filter(Boolean).map((line) => line.slice(2).trim()).filter(Boolean)
-    : [];
-  return { available: Boolean(revision), revision, status: status || "", files, capturedAt: timestamp() };
+  const snapshot = await captureRepoSnapshot(projectRoot, [], timestamp());
+  return {
+    ...snapshot,
+    available: Boolean(snapshot.headRevision),
+    revision: snapshot.headRevision,
+    status: status || "",
+    files: snapshot.changedFiles,
+  };
 }
 
 function appendOutput(buffer, chunk) {
@@ -355,9 +360,10 @@ export async function resumeExecution(projectRoot, executionId, actor) {
   const current = (await getExecution(projectRoot, executionId)).execution;
   if (!["interrupted", "failed", "cancelled"].includes(current.status)) throw new ValidationError("Only an interrupted, failed, or cancelled Execution can resume.", { executionId, status: current.status });
   const workspace = await readWorkspace(projectRoot);
-  const change = requireChange(workspace, current.changeId);
+  let change = requireChange(workspace, current.changeId);
   if (change.status !== "approved") {
     await updateEntity(projectRoot, "changes", change.id, { status: "approved" }, actor);
+    change = requireChange(await readWorkspace(projectRoot), current.changeId);
   }
   return startExecution(projectRoot, { changeId: change.id, agentId: current.agentId, adapter: current.input?.adapter, parentExecutionId: current.id, actor });
 }

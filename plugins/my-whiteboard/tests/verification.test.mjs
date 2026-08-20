@@ -82,6 +82,8 @@ test("Proof C Case A observes the real Proof B repository independently", async 
   }, observed, { baseRevision, verificationEvidence: [{ command: "npm test", status: "passed", source: "independent-test-run" }] });
   assert.equal(result.status, "pass");
   assert.equal(result.authority.observed, "fresh-repo-observation");
+  assert.equal(result.observed.repoSnapshot.headRevision, baseRevision);
+  assert.equal(result.observed.repoSnapshot.dirty, true);
   assert.ok(result.semanticDiff.some((item) => item.id === "endpoint:GET /api/health" && item.status === "added"));
   assert.ok(result.semanticDiff.some((item) => item.id === "protected:GET /api/status" && item.status === "unchanged"));
 });

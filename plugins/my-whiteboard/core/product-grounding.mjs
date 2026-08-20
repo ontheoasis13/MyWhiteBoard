@@ -6,6 +6,7 @@ import { promisify } from "node:util";
 import { ConflictError, NotFoundError, ValidationError } from "./errors.mjs";
 import { OBSERVATION_EXTENSIONS, scanProjectSources } from "./source-observation.mjs";
 import { slug } from "./schema.mjs";
+import { captureRepoSnapshot, formalizeProjectModel, normalizeEvidenceRecord, normalizeRepoSnapshot, projectMapProjection } from "./project-model.mjs";
 
 const execFileAsync = promisify(execFile);
 const MODEL_SCHEMA_VERSION = 1;
@@ -398,8 +399,8 @@ function buildProductHierarchy(features, evidence, previousHierarchy, base) {
 export async function observeProductGrounding(projectRoot, options = {}) {
   const observedAt = options.now || new Date().toISOString();
   const scanned = await scanProjectSources(projectRoot, { maxFiles: options.maxFiles || 1_000, extensions: OBSERVATION_EXTENSIONS });
-  const repoRevision = await repositoryRevision(projectRoot, scanned.files);
-  const base = { repoRevision, observedAt };
+  const repoSnapshot = await captureRepoSnapshot(projectRoot, scanned.files, observedAt);
+  const base = { repoRevision: repoSnapshot.headRevision, repoSnapshotId: repoSnapshot.workingTreeFingerprint, observedAt };
   const evidence = new Map();
 
   for (const file of scanned.files) {
@@ -413,14 +414,20 @@ export async function observeProductGrounding(projectRoot, options = {}) {
     for (const item of [...extractSymbols(file, base), ...extractRuntimeRoutes(file, base), ...extractMcpTools(file, base), ...extractTests(file, base), ...extractDatabase(file, base)]) addEvidence(evidence, item);
   }
 
-  return { scanned, repoRevision, observedAt, evidence };
+  return { scanned, repoSnapshot, repoRevision: repoSnapshot.headRevision, observedAt, evidence };
 }
 
 export async function readProductGrounding(projectRoot, options = {}) {
   try {
     const model = JSON.parse(await readFile(productModelPath(projectRoot), "utf8"));
     if (model.schemaVersion !== MODEL_SCHEMA_VERSION) throw new ValidationError(`Unsupported ProductModel schema: ${model.schemaVersion}`);
-    return model;
+    const evidenceFiles = Object.values(model.evidence || {})
+      .filter((item) => item.type === "file" && item.source)
+      .map((item) => ({ relative: item.source, sourceHash: item.details?.sourceHash || "" }));
+    const snapshot = options.refreshSnapshot === false
+      ? normalizeRepoSnapshot(model)
+      : await captureRepoSnapshot(projectRoot, evidenceFiles, new Date().toISOString());
+    return formalizeProjectModel(model, snapshot);
   } catch (error) {
     if (error?.code === "ENOENT" && options.optional) return null;
     if (error?.code === "ENOENT") throw new NotFoundError("Product grounding has not been scanned yet.", { projectRoot: path.resolve(projectRoot) });
@@ -441,18 +448,20 @@ export async function scanProductGrounding(projectRoot, options = {}) {
   const previous = await readProductGrounding(projectRoot, { optional: true });
   const observation = await observeProductGrounding(projectRoot, options);
   const identity = await projectIdentity(projectRoot);
-  const base = { repoRevision: observation.repoRevision, observedAt: observation.observedAt };
+  const base = { repoRevision: observation.repoRevision, repoSnapshotId: observation.repoSnapshot.workingTreeFingerprint, observedAt: observation.observedAt };
   const evidence = new Map(observation.evidence);
   const features = inferFeatures(evidence, base);
   const humanIntent = previous?.humanIntent || { featureCorrections: {} };
   applyHumanIntent(features, evidence, humanIntent, previous, base);
   const productHierarchy = buildProductHierarchy(features, evidence, previous?.productHierarchy, base);
-  const model = {
+  const rawModel = {
     schemaVersion: MODEL_SCHEMA_VERSION,
-    modelType: "project-model-proof-a",
+    modelType: "ProjectModel",
+    projectModelVersion: 1,
     version: Number(previous?.version || 0) + 1,
     project: { ...identity, root: "." },
     repoRevision: observation.repoRevision,
+    repoSnapshot: observation.repoSnapshot,
     observedAt: observation.observedAt,
     createdAt: previous?.createdAt || observation.observedAt,
     updatedAt: observation.observedAt,
@@ -468,7 +477,9 @@ export async function scanProductGrounding(projectRoot, options = {}) {
     evidence: Object.fromEntries([...evidence.entries()].sort(([a], [b]) => a.localeCompare(b))),
     humanIntent,
     productHierarchy,
+    visualLayout: previous?.visualLayout || {},
   };
+  const model = formalizeProjectModel(rawModel, observation.repoSnapshot);
   const file = options.persist === false ? null : await writeProductGrounding(projectRoot, model);
   return { model, path: file };
 }
@@ -510,7 +521,8 @@ export async function correctProductFeature(projectRoot, input = {}) {
     type: "human_confirmation",
     source: correction.actor.id || "human",
     target: featureId,
-    repoRevision: model.repoRevision,
+    repoRevision: model.repoSnapshot?.headRevision || model.repoRevision,
+    repoSnapshotId: model.repoSnapshot?.workingTreeFingerprint || null,
     observedAt: now,
     certainty: "confirmed",
     details: { observationKind: "human_correction", reason: correction.reason, correctionVersion: correction.version },
@@ -527,16 +539,18 @@ export async function correctProductFeature(projectRoot, input = {}) {
   };
   const evidence = new Map(Object.entries(model.evidence));
   model.productHierarchy = buildProductHierarchy(model.features, evidence, model.productHierarchy, { repoRevision: model.repoRevision, observedAt: now });
-  model.evidence = Object.fromEntries([...evidence.entries()].sort(([a], [b]) => a.localeCompare(b)));
+  model.evidence = Object.fromEntries([...evidence.entries()].map(([id, item]) => [id, normalizeEvidenceRecord(item, model.repoSnapshot)]).sort(([a], [b]) => a.localeCompare(b)));
   model.version += 1;
   model.updatedAt = now;
   model.stats.evidence = Object.keys(model.evidence).length;
   model.stats.confirmedEvidence = Object.values(model.evidence).filter((item) => item.certainty === "confirmed").length;
-  const file = await writeProductGrounding(projectRoot, model);
-  return { model, feature: model.features[featureId], correction, path: file };
+  const formalized = formalizeProjectModel(model, model.repoSnapshot);
+  const file = await writeProductGrounding(projectRoot, formalized);
+  return { model: formalized, feature: formalized.features[featureId], correction, path: file };
 }
 
 export function summarizeProductMap(model) {
+  if (model.productMapProjection) return model.productMapProjection;
   return {
     project: model.project,
     repoRevision: model.repoRevision,

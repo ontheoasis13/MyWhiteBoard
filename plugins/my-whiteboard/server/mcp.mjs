@@ -281,14 +281,14 @@ export const workspaceTools = [
   {
     name: "product_grounding_scan",
     title: "Scan a product-grounded project model",
-    description: "Build deterministic TS/JS code observations, traceable Evidence, and a Product Map while preserving durable Human Intent corrections.",
+    description: "Build the formal Living ProjectModel v1 from deterministic TS/JS observations, traceable Evidence, RepoSnapshot freshness, Actionability, and a Product Map projection while preserving durable Human Intent corrections.",
     inputSchema: { type: "object", properties: { project_root: { type: "string" }, max_files: { type: "integer", minimum: 1, maximum: 2000 }, actor: actorSchema }, required: ["project_root"], additionalProperties: false },
     annotations: mutating,
   },
   {
     name: "product_grounding_get",
     title: "Read the product-grounded project model",
-    description: "Read the current Product Map and its Feature-to-Evidence trace without scanning or changing the repository.",
+    description: "Read the current Living ProjectModel v1, Product Map projection, RepoSnapshot, and Feature-to-Evidence trace without scanning or changing the repository.",
     inputSchema: { type: "object", properties: { project_root: { type: "string" }, include_evidence: { type: "boolean" } }, required: ["project_root"], additionalProperties: false },
     annotations: readOnly,
   },
