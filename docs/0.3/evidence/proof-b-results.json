@@ -5,6 +5,14 @@
   "proofACommit": "cd26a62c0f3a3b988997e9ba73a4f88b12b7620b",
   "hierarchyCommit": "637c7b4",
   "toolCount": 40,
+  "validationRepo": {
+    "path": "C:\\Users\\NCKZ\\Documents\\New project 2\\proof-b-validation",
+    "baseRevision": "3550be483b271199f6a71f2a1b2407849cb34880",
+    "workspaceVersion": 3,
+    "agentId": "proof-b-external-host",
+    "changeId": "change-proof-b-health-endpoint",
+    "changeStatus": "approved"
+  },
   "bridge": {
     "changeCollection": "changes",
     "executionCollection": "executions",
