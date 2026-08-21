@@ -290,6 +290,7 @@ export function App() {
   };
   const chooseBoard = (id: string) => {
     setView("board");
+    setSelectedNode(null);
     setActiveBoardId(id);
     boardRef.current = workspace?.entities.boards[id] || null;
     userInteractedRef.current = false;
