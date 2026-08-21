@@ -1,0 +1,33 @@
+{
+  "phase": "2.1-acceptance-hardening",
+  "status": "TECHNICAL_READY_CLEAN_ROOM_GOLDEN_TEST_PENDING",
+  "baseline": "b4e2bae8fc7980b98992e7c4a09255ae58fe07e0",
+  "releaseTagPolicy": "v0.3-proofs-pass and 0.2 release tags unchanged",
+  "checks": {
+    "humanApprovalBoundary": "PASS",
+    "proposalStructuralInvariants": "PASS",
+    "proposalSupersedeHygiene": "PASS",
+    "htmlContaminationGuard": "PASS",
+    "agentPresenceSemantics": "PASS",
+    "productStructureStatusSeparation": "PASS",
+    "agentStopAfterProposalGuidance": "PASS",
+    "legacyWorkspaceCompatibility": "PASS",
+    "proofA_B_CRegression": "PASS"
+  },
+  "externalAcceptance": {
+    "workbuddyGoldenTest": "PENDING",
+    "humanUxTest": "PENDING",
+    "reason": "Requires a fresh external WorkBuddy session and a real human Product View review; Codex does not operate that client."
+  },
+  "runtime": {
+    "declaredVersion": "0.2.0-alpha.3",
+    "toolCount": 46
+  },
+  "verification": {
+    "tests": "62/62 passed",
+    "typecheck": "passed",
+    "build": "passed",
+    "mcpSmoke": "passed; 46 tools",
+    "repoCleanBeforeCommit": true
+  }
+}
