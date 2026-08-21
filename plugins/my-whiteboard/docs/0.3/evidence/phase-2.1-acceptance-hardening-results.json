@@ -2,7 +2,7 @@
   "phase": "2.1-acceptance-hardening",
   "status": "TECHNICAL_READY_CLEAN_ROOM_GOLDEN_TEST_PENDING",
   "baseline": "b4e2bae8fc7980b98992e7c4a09255ae58fe07e0",
-  "finalHead": "baea1c197314a357be9707797f6817a5839d4236",
+  "finalHead": "c28c529",
   "branch": "agent/v0.3-control-loop",
   "releaseTagPolicy": "v0.3-proofs-pass and 0.2 release tags unchanged",
   "checks": {
