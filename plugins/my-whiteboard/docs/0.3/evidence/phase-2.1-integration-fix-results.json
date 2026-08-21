@@ -1,0 +1,48 @@
+{
+  "phase": "2.1-integration-fix",
+  "status": "PASS",
+  "baseline": "865740049f8b7ca71deb68be928be865aa00d130",
+  "implementationCommit": "755e6065c3da60dd6990a185a1d66a198efdd55b",
+  "branch": "agent/v0.3-control-loop",
+  "pluginVersion": "0.2.0-alpha.3",
+  "toolCount": 46,
+  "tagPolicy": {
+    "v0.3-proofs-pass": "unchanged",
+    "releaseTags02": "unchanged"
+  },
+  "baselineIntegrationFailures": {
+    "I1": "FAIL: served bundle was stale and did not contain active Chinese navigation / board empty-state text",
+    "I2": "FAIL: Agent entity lacked registeredAt and lastActivityAt",
+    "I3": "PASS",
+    "I4": "PASS after correcting an over-constrained test assertion",
+    "I6": "PASS"
+  },
+  "integrationContractTests": {
+    "file": "tests/phase2.1-integration.test.mjs",
+    "cases": ["I1 served UI bundle", "I2 Agent presence", "I3 approval boundary and provenance", "I4 5 groups / 12 features persistence and projection", "I6 served MCP guidance"],
+    "result": "5/5 passed"
+  },
+  "approvalEvidence": {
+    "mcpSpoof": "HUMAN_APPROVAL_REQUIRED",
+    "humanUi": "confirmed",
+    "requiredProvenance": ["actorType", "sessionId", "timestamp", "proposalId", "proposalVersion", "baseRepoSnapshot"]
+  },
+  "hierarchyEvidence": {
+    "groups": 5,
+    "features": 12,
+    "groupFeatureRelations": "Core-derived and persisted in productHierarchy and productMapProjection"
+  },
+  "browserEvidence": [
+    "docs/0.3/evidence/screenshots/phase2.1-integration/product-view-5-groups.png",
+    "docs/0.3/evidence/screenshots/phase2.1-integration/presence-and-product-map.png",
+    "docs/0.3/evidence/screenshots/phase2.1-integration/feature-inspector-evidence.png"
+  ],
+  "verification": {
+    "tests": "67/67 passed",
+    "typecheck": "passed",
+    "build": "passed and served assets committed",
+    "mcpSmoke": "passed; 46 tools",
+    "repoClean": true
+  },
+  "nextPhase": "STOP — Phase 3 not started"
+}
