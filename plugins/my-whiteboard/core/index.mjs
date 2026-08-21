@@ -11,3 +11,4 @@ export * from "./collaboration.mjs";
 export * from "./execution.mjs";
 export * from "./verification.mjs";
 export * from "./project-model.mjs";
+export * from "./product-lifecycle.mjs";

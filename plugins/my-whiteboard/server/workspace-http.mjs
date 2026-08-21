@@ -17,6 +17,8 @@ import {
   getProductStructureProposals,
   createProductStructureProposal,
   applyProductStructureProposal,
+  deriveProductLifecycleState,
+  productStructureStatusForLifecycle,
 } from "../core/index.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -138,17 +140,20 @@ export function createWorkspaceHttpService(options = {}) {
           const features = Object.values(model.features || {});
           const understandingState = model.understandingState || (!features.length ? "FAILED" : features.some((feature) => feature.actionability === "UNDERSTOOD") ? "PARTIAL" : "READY");
           const status = understandingState === "READY" ? "READY" : understandingState === "FAILED" || understandingState === "UNSUPPORTED" ? "FAILED" : "PARTIAL";
-          const freshness = model.repoSnapshot?.dirty || features.some((feature) => feature.actionability === "GROUNDED") ? "STALE" : "CURRENT";
           const proposals = await getProductStructureProposals(session.projectRoot, { status: "pending" });
-          const productStructureStatus = proposals.length ? "AWAITING_HUMAN_CONFIRMATION" : (model.humanIntent?.productStructureConfirmations?.length ? "CONFIRMED" : "PROPOSED");
-          return sendJson(res, 200, { model, status, understandingState, recommendedNextAction: model.recommendedNextAction || null, freshness, productStructureStatus, featureCount: features.length, proposals });
+          const lifecycle = deriveProductLifecycleState({ model, proposals });
+          const productStructureStatus = productStructureStatusForLifecycle(lifecycle.state);
+          const freshness = model.repoSnapshot?.dirty || model.repoSnapshot?.changedSinceBaseline ? "STALE" : "CURRENT";
+          return sendJson(res, 200, { model, status, understandingState, lifecycleState: lifecycle.state, recommendedNextAction: lifecycle.recommendedNextAction || null, freshness, productStructureStatus, featureCount: features.length, proposals });
         }
         if (req.method === "POST" && url.pathname === "/api/session/product-model/scan") {
           const model = await scanProductGrounding(session.projectRoot, await jsonBody(req));
           const proposals = await getProductStructureProposals(session.projectRoot, { status: "pending" });
           const understandingState = model.model.understandingState || "READY";
-          const productStructureStatus = proposals.length ? "AWAITING_HUMAN_CONFIRMATION" : (model.model.humanIntent?.productStructureConfirmations?.length ? "CONFIRMED" : "PROPOSED");
-          return sendJson(res, 200, { model: model.model, status: understandingState === "READY" ? "READY" : understandingState === "FAILED" || understandingState === "UNSUPPORTED" ? "FAILED" : "PARTIAL", understandingState, recommendedNextAction: model.model.recommendedNextAction || null, freshness: model.model.repoSnapshot?.dirty ? "STALE" : "CURRENT", productStructureStatus, proposals });
+          const lifecycle = deriveProductLifecycleState({ model: model.model, proposals });
+          const productStructureStatus = productStructureStatusForLifecycle(lifecycle.state);
+          const freshness = model.model.repoSnapshot?.dirty || model.model.repoSnapshot?.changedSinceBaseline ? "STALE" : "CURRENT";
+          return sendJson(res, 200, { model: model.model, status: understandingState === "READY" ? "READY" : understandingState === "FAILED" || understandingState === "UNSUPPORTED" ? "FAILED" : "PARTIAL", understandingState, lifecycleState: lifecycle.state, recommendedNextAction: lifecycle.recommendedNextAction || null, freshness, productStructureStatus, proposals });
         }
         if (req.method === "GET" && url.pathname === "/api/session/product-proposals") {
           return sendJson(res, 200, { proposals: await getProductStructureProposals(session.projectRoot, { status: url.searchParams.get("status") || undefined }) });

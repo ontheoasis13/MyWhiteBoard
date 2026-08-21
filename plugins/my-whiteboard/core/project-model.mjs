@@ -53,17 +53,18 @@ export async function captureRepoSnapshot(projectRoot, files = [], capturedAt = 
   // Excluding it keeps a Change baseline stable while the semantic workspace
   // itself is being updated; source and generated-code changes remain visible.
   const status = await git(root, ["status", "--porcelain", "--untracked-files=all", "--", ".", ":!.my-whiteboard"]);
-  const changedFiles = parseChangedFiles(status);
   const fileHashes = await Promise.all(files.map(async (file) => {
     let sourceHash = file.sourceHash;
     try { sourceHash = createHash("sha256").update(await readFile(path.join(root, file.relative))).digest("hex"); } catch {}
-    return { relative: file.relative, sourceHash };
+    return { relative: file.relative, sourceHash, baselineSourceHash: file.sourceHash || null };
   })).then((items) => items.sort((a, b) => a.relative.localeCompare(b.relative)));
+  const changedByHash = fileHashes.filter((file) => file.baselineSourceHash && file.sourceHash !== file.baselineSourceHash).map((file) => file.relative);
+  const changedFiles = [...new Set([...parseChangedFiles(status), ...changedByHash])].sort();
   const workingTreeFingerprint = hash(JSON.stringify({ headRevision, status, fileHashes }));
   return {
     schemaVersion: 1,
     headRevision,
-    dirty: Boolean(status.trim()),
+    dirty: changedFiles.length > 0,
     workingTreeFingerprint,
     changedFiles,
     capturedAt,

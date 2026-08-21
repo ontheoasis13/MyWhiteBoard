@@ -480,10 +480,17 @@ export async function readProductGrounding(projectRoot, options = {}) {
     const evidenceFiles = Object.values(model.evidence || {})
       .filter((item) => item.type === "file" && item.source)
       .map((item) => ({ relative: item.source, sourceHash: item.details?.sourceHash || "" }));
+    const storedSnapshot = normalizeRepoSnapshot(model);
     const snapshot = options.refreshSnapshot === false
       ? normalizeRepoSnapshot(model)
       : await captureRepoSnapshot(projectRoot, evidenceFiles, new Date().toISOString());
-    return formalizeProjectModel(model, snapshot);
+    const formalized = formalizeProjectModel(model, snapshot);
+    formalized.repoSnapshot = {
+      ...formalized.repoSnapshot,
+      baselineWorkingTreeFingerprint: storedSnapshot.workingTreeFingerprint || null,
+      changedSinceBaseline: Boolean(storedSnapshot.workingTreeFingerprint && storedSnapshot.workingTreeFingerprint !== snapshot.workingTreeFingerprint),
+    };
+    return formalized;
   } catch (error) {
     if (error?.code === "ENOENT" && options.optional) return null;
     if (error?.code === "ENOENT") throw new NotFoundError("Product grounding has not been scanned yet.", { projectRoot: path.resolve(projectRoot) });

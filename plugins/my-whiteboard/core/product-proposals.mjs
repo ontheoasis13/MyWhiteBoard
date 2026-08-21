@@ -219,6 +219,8 @@ export async function applyProductStructureProposal(projectRoot, input = {}) {
       confirmedAt: now,
       featureIds,
     });
+    model.understandingState = "READY";
+    model.recommendedNextAction = null;
     model.version = Number(model.version || 0) + 1; model.updatedAt = now;
     const formalized = formalizeProjectModel(model, model.repoSnapshot);
     await persistProductGroundingModel(projectRoot, formalized);
