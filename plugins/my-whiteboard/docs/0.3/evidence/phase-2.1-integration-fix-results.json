@@ -3,6 +3,7 @@
   "status": "PASS",
   "baseline": "865740049f8b7ca71deb68be928be865aa00d130",
   "implementationCommit": "755e6065c3da60dd6990a185a1d66a198efdd55b",
+  "finalHead": "755e6065c3da60dd6990a185a1d66a198efdd55b",
   "branch": "agent/v0.3-control-loop",
   "pluginVersion": "0.2.0-alpha.3",
   "toolCount": 46,
