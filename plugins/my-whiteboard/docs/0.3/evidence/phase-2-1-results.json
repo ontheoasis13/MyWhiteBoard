@@ -1,0 +1,38 @@
+{
+  "phase": "2.1",
+  "verdict": "TECHNICAL_READY_REAL_WORKBUDDY_ACCEPTANCE_PENDING",
+  "baseline": "c50554229981ec5bac72b19cb8e6b4484f40bcd0",
+  "declaredVersion": "0.2.0-alpha.3",
+  "protectedTagCommit": "8f7213990982b33c71e05445fa39013ca1ed83df",
+  "mcpToolCount": 46,
+  "tests": { "passed": 60, "total": 60 },
+  "typecheck": "pass",
+  "build": "pass",
+  "mcpSmoke": "pass",
+  "observationV2": {
+    "fixture": "tests/fixtures/vanilla-fullstack-workbench",
+    "observedFiles": [
+      { "relative": "public/app.js", "classification": "application_source" },
+      { "relative": "public/index.html", "classification": "ui_entry" },
+      { "relative": "public/styles.css", "classification": "supporting_asset" },
+      { "relative": "server.js", "classification": "application_source" }
+    ],
+    "understandingState": "NEEDS_INTERPRETATION",
+    "recommendedNextAction": "PRODUCT_STRUCTURE_PROPOSAL",
+    "signals": ["API routes", "frontend fetch", "HTML UI copy", "node:sqlite", "database path", "CREATE TABLE"],
+    "unmappedSignalsPersisted": true,
+    "vendorAndMinifiedExcluded": true
+  },
+  "proposal": {
+    "aggregate": "ProductStructureProposal",
+    "evidenceBacked": true,
+    "humanConfirmation": true,
+    "staleConfirmationBlocked": true,
+    "codeTruthMutated": false,
+    "automaticChangeTarget": false
+  },
+  "productView": { "states": ["READY", "PARTIAL", "NEEDS_INTERPRETATION", "UNSUPPORTED", "FAILED"], "pendingProposalUi": true },
+  "boardNodeInspector": { "selectionBridge": true, "codeSemantics": true, "relatedProductFeatures": true, "legacyCanvasReused": false },
+  "centralSoeFreshScan": { "status": "NOT_AVAILABLE_IN_CODEX_CHECKOUT", "path": null, "note": "Requires fresh WorkBuddy validation environment." },
+  "externalAcceptance": { "workbuddyGoldenPath": "PENDING", "humanUx": "PENDING" }
+}

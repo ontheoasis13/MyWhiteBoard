@@ -79,6 +79,8 @@ button { cursor: pointer; }
 .understanding-pill.ready { color: #2b8b60; background: #e0f5e9; }
 .understanding-pill.partial { color: #9a7024; background: #fff1c8; }
 .understanding-pill.failed { color: #ad4c53; background: #ffe5e5; }
+.understanding-pill.needs_interpretation { color: #6f52a4; background: #eee7ff; }
+.understanding-pill.unsupported { color: #6c7480; background: #edf0f3; }
 .freshness-pill.current { color: #2b8b60; background: #e0f5e9; }
 .freshness-pill.stale { color: #9a7024; background: #fff1c8; }
 .partial-card, .failed-card { display: flex; align-items: center; gap: 14px; margin: 5px 0 14px; padding: 12px 14px; border-radius: 11px; font-size: 11px; }
@@ -134,6 +136,14 @@ button { cursor: pointer; }
 .understanding-card.actionable { border-left-color: #2eaf73; background: #f7fdf9; }
 .understanding-card strong { color: #455269; font-size: 12px; }
 .understanding-card p { margin: 5px 0 0; color: #8793a5; font-size: 10px; line-height: 1.5; }
+.interpretation-banner, .proposal-card { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 13px 15px; margin: 0 0 12px; border: 1px solid #d9cff7; border-left: 3px solid #8d6bc7; border-radius: 10px; background: #fbf9ff; color: #5a4a75; }
+.interpretation-banner strong, .proposal-card strong { display: block; font-size: 12px; }
+.interpretation-banner span, .proposal-card span { display: block; margin-top: 4px; color: #8a7a9f; font-size: 10px; }
+.proposal-hint { white-space: nowrap; font-weight: 800; font-size: 10px; }
+.global-proposal { position: relative; z-index: 2; margin: 10px 22px 0 270px; }
+.proposal-actions { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.node-selected > :not(.node-inspector) { display: none; }
+.node-inspector .primary-button { margin-top: 8px; width: 100%; }
 .section-heading-row { display: flex; justify-content: space-between; align-items: baseline; }
 .evidence-summary { display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; align-items: center; padding: 10px; border-radius: 9px; background: #f3f5f9; }
 .evidence-summary strong { color: #4e45c3; font-size: 18px; }
