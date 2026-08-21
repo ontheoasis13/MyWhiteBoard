@@ -581,7 +581,7 @@ export async function callWorkspaceTool(name, args, httpService) {
     return content(`${proposals.length} Product Structure Proposal(s) found.`, { proposals });
   }
   if (name === "product_structure_proposal_apply") {
-    const result = await applyProductStructureProposal(args.project_root, { proposalId: args.proposal_id, expectedVersion: args.expected_version, action: args.action, patch: args.patch, actor: args.actor, now: args.now });
+    const result = await applyProductStructureProposal(args.project_root, { proposalId: args.proposal_id, expectedVersion: args.expected_version, action: args.action, patch: args.patch, actor: args.actor, approvalSource: "mcp", now: args.now });
     return content(`Product Structure Proposal “${args.proposal_id}” ${args.action} applied.`, result);
   }
   if (name === "my_whiteboard_info") {

@@ -163,6 +163,7 @@ export function createWorkspaceHttpService(options = {}) {
             ...body,
             approvalSource: body.action === "confirm" || body.action === "reject" ? "human-ui" : body.approvalSource,
             actor: body.action === "confirm" || body.action === "reject" ? { id: "human", displayName: "用户", client: "product-view" } : body.actor,
+            approvalContext: body.action === "confirm" || body.action === "reject" ? { actorType: "human_ui", sessionId: session.sessionId, timestamp: new Date().toISOString() } : body.approvalContext,
           });
           return sendJson(res, 200, result);
         }
@@ -225,7 +226,7 @@ export function createWorkspaceHttpService(options = {}) {
     const currentPort = await start();
     const sessionId = randomUUID();
     const token = randomBytes(32).toString("base64url");
-    sessions.set(sessionId, { projectRoot: path.resolve(projectRoot), boardId: boardId || null, token, createdAt: Date.now() });
+    sessions.set(sessionId, { sessionId, projectRoot: path.resolve(projectRoot), boardId: boardId || null, token, createdAt: Date.now() });
     const url = new URL(`http://${host}:${currentPort}/workspace/`);
     url.searchParams.set("session", sessionId);
     url.searchParams.set("token", token);

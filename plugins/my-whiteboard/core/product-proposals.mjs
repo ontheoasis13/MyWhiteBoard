@@ -164,7 +164,7 @@ export async function applyProductStructureProposal(projectRoot, input = {}) {
     if (expectedVersion !== proposal.version) throw new ConflictError("Proposal version is stale.", { proposalId, expectedVersion, actualVersion: proposal.version });
     const action = String(input.action || "").toLowerCase();
     const now = input.now || new Date().toISOString();
-    if ((action === "confirm" || action === "reject") && (input.approvalSource !== "human-ui" || input.actor?.client !== "product-view")) {
+    if ((action === "confirm" || action === "reject") && (input.approvalSource !== "human-ui" || input.actor?.client !== "product-view" || input.approvalContext?.actorType !== "human_ui" || !input.approvalContext?.sessionId)) {
       throw new ValidationError("Product Structure approval must originate from the authenticated Product View human UI.", { reasonCode: "HUMAN_APPROVAL_REQUIRED" });
     }
     if (action === "reject") {
@@ -208,7 +208,17 @@ export async function applyProductStructureProposal(projectRoot, input = {}) {
     }
     model.humanIntent ||= { featureCorrections: {} };
     model.humanIntent.productStructureConfirmations ||= [];
-    model.humanIntent.productStructureConfirmations.push({ proposalId: proposal.id, actor: input.actor || { id: "human", displayName: "用户", client: "human" }, confirmedAt: now, featureIds });
+    model.humanIntent.productStructureConfirmations.push({
+      proposalId: proposal.id,
+      proposalVersion: expectedVersion,
+      actorType: "human_ui",
+      actor: input.actor || { id: "human", displayName: "用户", client: "product-view" },
+      sessionId: input.approvalContext.sessionId,
+      timestamp: input.approvalContext.timestamp || now,
+      baseRepoSnapshot: proposal.baseRepoSnapshotId,
+      confirmedAt: now,
+      featureIds,
+    });
     model.version = Number(model.version || 0) + 1; model.updatedAt = now;
     const formalized = formalizeProjectModel(model, model.repoSnapshot);
     await persistProductGroundingModel(projectRoot, formalized);

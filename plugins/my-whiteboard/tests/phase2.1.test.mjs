@@ -34,7 +34,7 @@ test("evidence-backed Product Structure Proposal is pending, durable, and Human-
     const proposal = await createProductStructureProposal(root, { proposedByAgentId: "phase21-test-agent", features: [{ proposalKey: "content", name: "内容生成", evidenceRefs: [evidence.id] }] });
     assert.equal(proposal.status, "pending");
     assert.equal((await getProductStructureProposals(root)).length, 1);
-    const confirmed = await applyProductStructureProposal(root, { proposalId: proposal.id, expectedVersion: proposal.version, action: "confirm", approvalSource: "human-ui", actor: { id: "human", client: "product-view" } });
+    const confirmed = await applyProductStructureProposal(root, { proposalId: proposal.id, expectedVersion: proposal.version, action: "confirm", approvalSource: "human-ui", actor: { id: "human", client: "product-view" }, approvalContext: { actorType: "human_ui", sessionId: "test-session" } });
     assert.equal(confirmed.proposal.status, "confirmed");
     assert.ok(confirmed.model.humanIntent.productStructureConfirmations.some((item) => item.proposalId === proposal.id));
     assert.ok(confirmed.model.features["feature-proposed-content"]);
@@ -57,7 +57,7 @@ test("stale Product Structure Proposal cannot be silently confirmed", async () =
     const evidence = Object.values(scan.model.evidence).find((item) => item.type === "request");
     const proposal = await createProductStructureProposal(root, { proposedByAgentId: "phase21-test-agent", features: [{ proposalKey: "content", name: "内容生成", evidenceRefs: [evidence.id] }] });
     await import("node:fs/promises").then(({ appendFile }) => appendFile(path.join(root, "server.js"), "\n// drift\n"));
-    await assert.rejects(() => applyProductStructureProposal(root, { proposalId: proposal.id, expectedVersion: proposal.version, action: "confirm", approvalSource: "human-ui", actor: { id: "human", client: "product-view" } }), (error) => error.code === "VERSION_CONFLICT");
+    await assert.rejects(() => applyProductStructureProposal(root, { proposalId: proposal.id, expectedVersion: proposal.version, action: "confirm", approvalSource: "human-ui", actor: { id: "human", client: "product-view" }, approvalContext: { actorType: "human_ui", sessionId: "test-session" } }), (error) => error.code === "VERSION_CONFLICT");
     const stored = (await getProductStructureProposals(root))[0];
     assert.equal(stored.status, "superseded");
   } finally {
@@ -90,7 +90,7 @@ test("proposal approval is human UI only and structure relations are Core-derive
     const edited = await applyProductStructureProposal(root, { proposalId: proposal.id, expectedVersion: proposal.version, action: "update", patch: { features: [{ ...proposal.features[0], name: "内容生成（调整后）" }] } });
     assert.equal(edited.features[0].name, "内容生成（调整后）");
     await assert.rejects(() => callWorkspaceTool("product_structure_proposal_apply", { project_root: root, proposal_id: proposal.id, expected_version: edited.version, action: "confirm" }), (error) => error.code === "VALIDATION_ERROR" && error.details?.reasonCode === "HUMAN_APPROVAL_REQUIRED");
-    const confirmed = await applyProductStructureProposal(root, { proposalId: proposal.id, expectedVersion: edited.version, action: "confirm", approvalSource: "human-ui", actor: { id: "human", client: "product-view" } });
+    const confirmed = await applyProductStructureProposal(root, { proposalId: proposal.id, expectedVersion: edited.version, action: "confirm", approvalSource: "human-ui", actor: { id: "human", client: "product-view" }, approvalContext: { actorType: "human_ui", sessionId: "test-session" } });
     assert.equal(confirmed.proposal.status, "confirmed");
     assert.equal(confirmed.model.features["feature-proposed-generate"].name, "内容生成（调整后）");
     assert.deepEqual(confirmed.model.productHierarchy.groups["group-proposed-content"].featureIds, ["feature-proposed-generate"]);
@@ -100,7 +100,7 @@ test("proposal approval is human UI only and structure relations are Core-derive
       features: [{ proposalKey: "generate-2", name: "第二个功能", groupKey: "content", evidenceRefs: [evidence.id] }],
     });
     await assert.rejects(() => callWorkspaceTool("product_structure_proposal_apply", { project_root: root, proposal_id: second.id, expected_version: second.version, action: "reject" }), (error) => error.code === "VALIDATION_ERROR" && error.details?.reasonCode === "HUMAN_APPROVAL_REQUIRED");
-    const rejected = await applyProductStructureProposal(root, { proposalId: second.id, expectedVersion: second.version, action: "reject", approvalSource: "human-ui", actor: { id: "human", client: "product-view" } });
+    const rejected = await applyProductStructureProposal(root, { proposalId: second.id, expectedVersion: second.version, action: "reject", approvalSource: "human-ui", actor: { id: "human", client: "product-view" }, approvalContext: { actorType: "human_ui", sessionId: "test-session" } });
     assert.equal(rejected.status, "rejected");
   } finally { await rm(root, { recursive: true, force: true }); }
 });

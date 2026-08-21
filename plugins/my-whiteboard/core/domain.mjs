@@ -34,6 +34,7 @@ export async function applyDomainChanges(projectRoot, collection, changes, actor
 }
 
 export async function connectAgent(projectRoot, input, actor = input) {
+  const now = new Date().toISOString();
   const agent = {
     id: String(input?.id || input?.agent_id || ""),
     displayName: String(input?.displayName || input?.display_name || input?.id || ""),
@@ -41,15 +42,16 @@ export async function connectAgent(projectRoot, input, actor = input) {
     status: String(input?.status || "connected"),
     capabilities: Array.isArray(input?.capabilities) ? input.capabilities.map(String) : [],
     metadata: clone(input?.metadata || {}),
-    lastSeenAt: new Date().toISOString(),
+    lastSeenAt: now,
+    lastActivityAt: now,
   };
   if (!agent.id) throw new ValidationError("Agent id is required.");
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const workspace = await readWorkspace(projectRoot);
     const current = workspace.entities.agents[agent.id];
     const operation = current
-      ? { type: "entity.update", collection: "agents", id: agent.id, expectedVersion: current.version, patch: agent }
-      : { type: "entity.create", collection: "agents", entity: agent };
+      ? { type: "entity.update", collection: "agents", id: agent.id, expectedVersion: current.version, patch: { ...agent, registeredAt: current.registeredAt || now } }
+      : { type: "entity.create", collection: "agents", entity: { ...agent, registeredAt: now } };
     try {
       const result = await applyWorkspaceTransaction(projectRoot, { actor, operations: [operation] });
       const updated = await readWorkspace(projectRoot);
