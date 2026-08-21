@@ -39,7 +39,13 @@ export function classifySourceFile(relative, source = "") {
   if (/(^|\/)(vendor|node_modules)(\/|$)/.test(lower)) return "vendor";
   if (/(^|\/)(generated|dist|build|out|coverage)(\/|$)/.test(lower) || GENERATED_FILE_PATTERNS.some((pattern) => pattern.test(lower))) return "generated";
   if (/(^|\/)(test|tests|__tests__)(\/|$)|\.(test|spec)\.[cm]?[jt]sx?$/.test(lower)) return "test";
-  if (extension === ".html") return "ui_entry";
+  if (extension === ".html") {
+    const basename = path.posix.basename(lower);
+    if (/(^|[-_.])(debug|demo|helper)(?:[-_.]|$)/i.test(basename)) return "auxiliary_html";
+    if (/(项目地图|project[-_.]?map|report|export)(?:[-_.]|$)/i.test(basename)) return "generated_artifact";
+    if (basename === "index.html" || /(^|\/)(public|static)\/index\.html$/.test(lower)) return "ui_entry";
+    return "auxiliary_html";
+  }
   if (extension === ".css") return "supporting_asset";
   if (SOURCE_EXTENSIONS.has(extension)) return "application_source";
   return source ? "application_source" : "binary_dependency";

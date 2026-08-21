@@ -213,6 +213,7 @@ export function projectMapProjection(model = {}) {
       nodeKind: "feature",
       name: feature.name,
       description: feature.description,
+      rationale: feature.rationale || "",
       level: feature.level || 2,
       groupId: feature.groupId || null,
       parentFeatureId: feature.parentFeatureId || null,

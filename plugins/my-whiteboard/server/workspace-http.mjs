@@ -140,13 +140,15 @@ export function createWorkspaceHttpService(options = {}) {
           const status = understandingState === "READY" ? "READY" : understandingState === "FAILED" || understandingState === "UNSUPPORTED" ? "FAILED" : "PARTIAL";
           const freshness = model.repoSnapshot?.dirty || features.some((feature) => feature.actionability === "GROUNDED") ? "STALE" : "CURRENT";
           const proposals = await getProductStructureProposals(session.projectRoot, { status: "pending" });
-          return sendJson(res, 200, { model, status, understandingState, recommendedNextAction: model.recommendedNextAction || null, freshness, featureCount: features.length, proposals });
+          const productStructureStatus = proposals.length ? "AWAITING_HUMAN_CONFIRMATION" : (model.humanIntent?.productStructureConfirmations?.length ? "CONFIRMED" : "PROPOSED");
+          return sendJson(res, 200, { model, status, understandingState, recommendedNextAction: model.recommendedNextAction || null, freshness, productStructureStatus, featureCount: features.length, proposals });
         }
         if (req.method === "POST" && url.pathname === "/api/session/product-model/scan") {
           const model = await scanProductGrounding(session.projectRoot, await jsonBody(req));
           const proposals = await getProductStructureProposals(session.projectRoot, { status: "pending" });
           const understandingState = model.model.understandingState || "READY";
-          return sendJson(res, 200, { model: model.model, status: understandingState === "READY" ? "READY" : understandingState === "FAILED" || understandingState === "UNSUPPORTED" ? "FAILED" : "PARTIAL", understandingState, recommendedNextAction: model.model.recommendedNextAction || null, freshness: model.model.repoSnapshot?.dirty ? "STALE" : "CURRENT", proposals });
+          const productStructureStatus = proposals.length ? "AWAITING_HUMAN_CONFIRMATION" : (model.model.humanIntent?.productStructureConfirmations?.length ? "CONFIRMED" : "PROPOSED");
+          return sendJson(res, 200, { model: model.model, status: understandingState === "READY" ? "READY" : understandingState === "FAILED" || understandingState === "UNSUPPORTED" ? "FAILED" : "PARTIAL", understandingState, recommendedNextAction: model.model.recommendedNextAction || null, freshness: model.model.repoSnapshot?.dirty ? "STALE" : "CURRENT", productStructureStatus, proposals });
         }
         if (req.method === "GET" && url.pathname === "/api/session/product-proposals") {
           return sendJson(res, 200, { proposals: await getProductStructureProposals(session.projectRoot, { status: url.searchParams.get("status") || undefined }) });
@@ -156,7 +158,12 @@ export function createWorkspaceHttpService(options = {}) {
           return sendJson(res, 200, { proposal });
         }
         if (req.method === "POST" && url.pathname === "/api/session/product-proposal/apply") {
-          const result = await applyProductStructureProposal(session.projectRoot, await jsonBody(req));
+          const body = await jsonBody(req);
+          const result = await applyProductStructureProposal(session.projectRoot, {
+            ...body,
+            approvalSource: body.action === "confirm" || body.action === "reject" ? "human-ui" : body.approvalSource,
+            actor: body.action === "confirm" || body.action === "reject" ? { id: "human", displayName: "用户", client: "product-view" } : body.actor,
+          });
           return sendJson(res, 200, result);
         }
         if (req.method === "POST" && url.pathname === "/api/session/product-feature/correct") {
