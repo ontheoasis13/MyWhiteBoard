@@ -1,0 +1,52 @@
+{
+  "phase": "2-state-coherence-fix",
+  "status": "PASS",
+  "phase3": "HOLD",
+  "baselineHead": "78cbc225815709def4db1ba9e63979bca0f31a75",
+  "implementationHead": "7092a52",
+  "checks": {
+    "tests": { "status": "passed", "passed": 73, "failed": 0 },
+    "typecheck": "passed",
+    "build": "passed",
+    "mcpSmoke": { "status": "passed", "tools": 46 },
+    "servedAssets": "updated",
+    "proofABC": "preserved"
+  },
+  "lifecycle": {
+    "states": ["NEEDS_INTERPRETATION", "PROPOSAL_PENDING", "CONFIRMED"],
+    "derivedBy": "deriveProductLifecycleState",
+    "executionReadiness": "separate Change/Execution derived axis"
+  },
+  "freshness": {
+    "authority": "RepoSnapshot",
+    "excludes": [".my-whiteboard/**", "My Whiteboard state"],
+    "supports": ["git status", "non-git source hash comparison", "HEAD unchanged with working-tree change"],
+    "actionabilityIndependent": true
+  },
+  "integrationTests": {
+    "T1": "passed",
+    "T2": "passed",
+    "T3": "passed",
+    "T4": "passed",
+    "T5": "passed",
+    "T6": "passed"
+  },
+  "browserEvidence": {
+    "caseA": "docs/0.3/evidence/screenshots/phase2-state-coherence/pending.png",
+    "caseB": "docs/0.3/evidence/screenshots/phase2-state-coherence/confirmed.png",
+    "caseC": "docs/0.3/evidence/screenshots/phase2-state-coherence/source-change-stale.png",
+    "caseAState": { "lifecycleState": "PROPOSAL_PENDING", "freshness": "CURRENT", "humanActions": ["confirm", "edit", "reject"] },
+    "caseBState": { "lifecycleState": "CONFIRMED", "recommendedNextAction": null, "pendingCta": false },
+    "caseCState": { "freshness": "STALE", "changedFiles": ["server.js"] }
+  },
+  "mcpPersistenceEvidence": {
+    "proposal": { "status": "confirmed", "version": 2 },
+    "productModel": { "understandingState": "READY", "recommendedNextAction": null, "confirmedGroup": "group-proposed-delivery", "confirmedFeature": "feature-proposed-health" },
+    "mcpTool": "product_grounding_get",
+    "postSourceChange": { "changedFiles": ["server.js"] }
+  },
+  "scope": {
+    "included": ["lifecycle coherence", "RepoSnapshot freshness", "T1-T6 integration coverage", "browser evidence"],
+    "excluded": ["Phase 3", "Change Planning UI", "Execution UI", "Verification UI", "new Agent adapters"]
+  }
+}
