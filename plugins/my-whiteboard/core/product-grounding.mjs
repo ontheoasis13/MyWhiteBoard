@@ -514,6 +514,16 @@ export async function scanProductGrounding(projectRoot, options = {}) {
     featureCorrections: Object.fromEntries(Object.entries(previous?.humanIntent?.featureCorrections || {}).filter(([id]) => !skippedHumanIntent.has(id))),
   };
   applyHumanIntent(features, evidence, humanIntent, previous, base);
+  for (const [featureId, previousFeature] of Object.entries(previous?.features || {})) {
+    if (features[featureId] || !previousFeature?.humanIntent?.confirmedFromProposal) continue;
+    features[featureId] = {
+      ...previousFeature,
+      productState: "inferred",
+      actionability: "grounded",
+      groundingRefs: [...new Set((previousFeature.groundingRefs || []).filter((ref) => evidence.has(ref)))],
+      updatedAt: observation.observedAt,
+    };
+  }
   const productHierarchy = buildProductHierarchy(features, evidence, previous?.productHierarchy, base);
   const understanding = deriveUnderstandingState(features, evidence, observation.observedFiles, inferred.unmappedProductSignals);
   const rawModel = {

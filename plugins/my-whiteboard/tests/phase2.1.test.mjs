@@ -39,6 +39,9 @@ test("evidence-backed Product Structure Proposal is pending, durable, and Human-
     assert.equal(confirmed.model.features["feature-proposed-content"].actionability, "GROUNDED");
     const persisted = JSON.parse(await readFile(path.join(root, ".my-whiteboard", "product-model.json"), "utf8"));
     assert.ok(persisted.features["feature-proposed-content"]);
+    const rescanned = await scanProductGrounding(root);
+    assert.ok(rescanned.model.features["feature-proposed-content"]);
+    assert.ok(rescanned.model.humanIntent.productStructureConfirmations.some((item) => item.proposalId === proposal.id));
   } finally {
     await rm(root, { recursive: true, force: true });
   }
