@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { mkdtemp, writeFile } from "node:fs/promises";
 
 const projectRoot = await mkdtemp(path.join(os.tmpdir(), "my-whiteboard-workspace-smoke-"));
-await writeFile(path.join(projectRoot, "index.js"), "import { answer } from './value.js';\napp.get('/api/answers', () => answer);\n", "utf8");
+await writeFile(path.join(projectRoot, "index.js"), "import { answer } from './value.js';\napp.get('/api/workspace', () => answer);\n", "utf8");
 await writeFile(path.join(projectRoot, "value.js"), "export const answer = 42;\n", "utf8");
 
 const child = spawn(process.execPath, [fileURLToPath(new URL("./server.mjs", import.meta.url))], {
@@ -47,7 +47,7 @@ try {
   const initialized = await request("initialize", { protocolVersion: "2025-11-25", capabilities: {} });
   assert(initialized.result?.serverInfo?.name === "My Whiteboard Workspace", "initialize failed");
   const listed = await request("tools/list");
-  assert(listed.result.tools.length === 42, "unexpected workspace tool count");
+  assert(listed.result.tools.length === 46, "unexpected workspace tool count");
   assert(listed.result.tools.some((tool) => tool.name === "verification_observe"), "verification observe tool missing");
   assert(listed.result.tools.some((tool) => tool.name === "verification_compare"), "verification compare tool missing");
   assert(listed.result.tools.every((tool) => !tool._meta?.["openai/outputTemplate"]), "iframe output template remains");
@@ -97,7 +97,7 @@ const synchronized = await request("tools/call", {
   const codeBoard = await request("tools/call", { name: "code_board_create", arguments: { project_root: projectRoot, title: "Code", max_files: 10 } });
   assert(codeBoard.result.structuredContent.scannedFiles.length === 2, "code scan failed");
   const grounding = await request("tools/call", { name: "product_grounding_scan", arguments: { project_root: projectRoot, max_files: 10 } });
-  const answerFeature = grounding.result.structuredContent.model.features["feature-answers"];
+  const answerFeature = grounding.result.structuredContent.model.features["feature-workspace"];
   assert(answerFeature?.groundingRefs.length >= 2, "product grounding failed");
   const correctedFeature = await request("tools/call", { name: "product_feature_correct", arguments: { project_root: projectRoot, feature_id: answerFeature.id, expected_version: answerFeature.version, patch: { name: "Answers" }, reason: "Smoke correction", actor: { id: "human", displayName: "Human", client: "smoke" } } });
   assert(correctedFeature.result.structuredContent.feature.version === 2, "Human Intent correction failed");

@@ -5,6 +5,7 @@ export * from "./legacy-import.mjs";
 export * from "./code-analysis.mjs";
 export * from "./source-observation.mjs";
 export * from "./product-grounding.mjs";
+export * from "./product-proposals.mjs";
 export * from "./domain.mjs";
 export * from "./collaboration.mjs";
 export * from "./execution.mjs";

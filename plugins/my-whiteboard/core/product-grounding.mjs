@@ -194,6 +194,41 @@ function extractRuntimeRoutes(file, base) {
       details: { observationKind: "http_route", method: match[1].toUpperCase(), route: match[2], line: lineAt(file.source, match.index || 0), featureToken: routeConcept(match[2]) },
     });
   }
+  const conditionalRoute = /\b(?:request|req)\.url\s*===?\s*["']([^"']+)["']/g;
+  for (const match of file.source.matchAll(conditionalRoute)) {
+    const context = file.source.slice(Math.max(0, (match.index || 0) - 120), (match.index || 0) + match[0].length + 40);
+    const method = context.match(/(?:request|req)\.method\s*===?\s*["'](GET|POST|PUT|PATCH|DELETE)["']/i)?.[1]?.toUpperCase() || "GET";
+    results.push({ type: "api", source: file.relative, target: `${method} ${match[1]}`, ...base, details: { observationKind: "http_route", method, route: match[1], line: lineAt(file.source, match.index || 0), featureToken: routeConcept(match[1]) } });
+  }
+  return results;
+}
+
+function extractUiSignals(file, base) {
+  if (file.classification !== "ui_entry") return [];
+  const results = [];
+  const patterns = [
+    { kind: "title", pattern: /<title[^>]*>([^<]+)<\/title>/gi },
+    { kind: "heading", pattern: /<h[1-6][^>]*>([^<]+)<\/h[1-6]>/gi },
+    { kind: "label", pattern: /<(?:button|label)[^>]*>([^<]+)<\/(?:button|label)>/gi },
+    { kind: "script_entry", pattern: /<script[^>]+src=["']([^"']+)["']/gi },
+  ];
+  for (const { kind, pattern } of patterns) {
+    for (const match of file.source.matchAll(pattern)) {
+      const target = String(match[1] || "").trim();
+      if (!target) continue;
+      results.push({ type: "ui", source: file.relative, target, ...base, details: { observationKind: kind, line: lineAt(file.source, match.index || 0), featureToken: normalizedConcept(target) } });
+    }
+  }
+  return results;
+}
+
+function extractFrontendRequests(file, base) {
+  const results = [];
+  const pattern = /\bfetch\s*\(\s*["'`]([^"'`]+)["'`]/g;
+  for (const match of file.source.matchAll(pattern)) {
+    const route = match[1];
+    results.push({ type: "request", source: file.relative, target: route, ...base, details: { observationKind: "frontend_fetch", route, line: lineAt(file.source, match.index || 0), featureToken: routeConcept(route) } });
+  }
   return results;
 }
 
@@ -248,6 +283,17 @@ function extractDatabase(file, base) {
       results.push({ type: "database", source: file.relative, target: match[1], ...base, details: { observationKind: "sql_table", line: lineAt(file.source, match.index || 0) } });
     }
   }
+  if (file.classification === "application_source") {
+    for (const match of file.source.matchAll(/(?:node:sqlite|better-sqlite3|sqlite3)/gi)) {
+      results.push({ type: "database", source: file.relative, target: match[0], ...base, details: { observationKind: "sqlite_dependency", line: lineAt(file.source, match.index || 0), featureToken: "persistence" } });
+    }
+    for (const match of file.source.matchAll(/(?:CREATE\s+TABLE|createTable)\s+(?:IF\s+NOT\s+EXISTS\s+)?["'`]?([A-Za-z_][\w-]*)/gi)) {
+      results.push({ type: "database", source: file.relative, target: match[1], ...base, details: { observationKind: "sqlite_table", line: lineAt(file.source, match.index || 0), featureToken: "persistence" } });
+    }
+    for (const match of file.source.matchAll(/(?:sqlite|database|\.db|\.sqlite)[^\n]{0,120}/gi)) {
+      results.push({ type: "database", source: file.relative, target: match[0].trim().slice(0, 160), ...base, details: { observationKind: "database_path_or_sql", line: lineAt(file.source, match.index || 0), featureToken: "persistence" } });
+    }
+  }
   return results;
 }
 
@@ -286,11 +332,16 @@ function applyHumanIntent(features, evidence, humanIntent, previousModel, base) 
 
 function inferFeatures(evidence, base) {
   const byConcept = new Map();
+  const unmapped = [];
   for (const item of evidence.values()) {
     const concept = item.details?.featureToken;
     if (!concept || ["api", "route", "unknown", "feature"].includes(concept)) continue;
-    if (!byConcept.has(concept)) byConcept.set(concept, []);
-    byConcept.get(concept).push(item);
+    if (!Object.prototype.hasOwnProperty.call(CONCEPT_LABELS, concept)) {
+      unmapped.push({ signal: concept, evidenceRefs: [item.id], source: item.source, target: item.target });
+    } else {
+      if (!byConcept.has(concept)) byConcept.set(concept, []);
+      byConcept.get(concept).push(item);
+    }
   }
   const features = {};
   for (const [concept, directEvidence] of [...byConcept.entries()].sort(([a], [b]) => a.localeCompare(b))) {
@@ -331,42 +382,36 @@ function inferFeatures(evidence, base) {
       updatedAt: base.observedAt,
     };
   }
-  return features;
+  const mergedUnmapped = Object.values(unmapped.reduce((acc, item) => {
+    const key = `${item.signal}|${item.source}|${item.target}`;
+    acc[key] ||= { ...item, evidenceRefs: [] };
+    acc[key].evidenceRefs.push(...item.evidenceRefs);
+    return acc;
+  }, {})).map((item) => ({ ...item, evidenceRefs: [...new Set(item.evidenceRefs)] }));
+  return { features, unmappedProductSignals: mergedUnmapped };
 }
 
 function buildProductHierarchy(features, evidence, previousHierarchy, base) {
   const groups = {};
-  for (const definition of PRODUCT_GROUPS) {
-    const previous = previousHierarchy?.groups?.[definition.id];
-      groups[definition.id] = {
-        id: definition.id,
-        nodeKind: "group",
-        entityType: "product-group",
-      level: 1,
-      parentGroupId: null,
-      version: previous?.version || 1,
-      name: previous?.name || definition.name,
-      description: previous?.description || definition.description,
-      featureIds: [],
-      inferenceRefs: [],
-      humanIntent: previous?.humanIntent || null,
-    };
+  for (const previous of Object.values(previousHierarchy?.groups || {})) {
+    groups[previous.id] = { ...previous, featureIds: [], inferenceRefs: [] };
   }
   for (const feature of Object.values(features)) {
     const groupId = feature.groupId || defaultGroupId(feature.id);
     if (!groups[groupId]) {
+      const definition = PRODUCT_GROUPS.find((item) => item.id === groupId) || { id: groupId, name: "其他能力", description: "尚未有稳定产品分组的能力，等待人工确认。" };
       groups[groupId] = {
-        id: groupId,
+        id: definition.id,
         nodeKind: "group",
         entityType: "product-group",
         level: 1,
         parentGroupId: null,
-        version: previousHierarchy?.groups?.[groupId]?.version || 1,
-        name: previousHierarchy?.groups?.[groupId]?.name || "自定义产品分组",
-        description: previousHierarchy?.groups?.[groupId]?.description || "由人工意图创建的产品分组。",
+        version: 1,
+        name: definition.name,
+        description: definition.description,
         featureIds: [],
         inferenceRefs: [],
-        humanIntent: previousHierarchy?.groups?.[groupId]?.humanIntent || null,
+        humanIntent: null,
       };
     }
     feature.groupId = groupId;
@@ -406,17 +451,26 @@ export async function observeProductGrounding(projectRoot, options = {}) {
   const evidence = new Map();
 
   for (const file of scanned.files) {
-    addEvidence(evidence, { type: "file", source: file.relative, target: file.relative, ...base, certainty: "confirmed", details: { observationKind: "source_file", sourceHash: file.sourceHash, line: 1 } });
+    addEvidence(evidence, { type: "file", source: file.relative, target: file.relative, ...base, certainty: "confirmed", details: { observationKind: "source_file", sourceHash: file.sourceHash, classification: file.classification, line: 1 } });
     for (const dependency of file.imports) {
       if (!dependency.target) continue;
       addEvidence(evidence, { type: "reference", source: file.relative, target: dependency.target, ...base, certainty: "confirmed", details: { observationKind: "import", specifier: dependency.specifier, line: dependency.line } });
     }
     const route = filesystemRoute(file.relative);
     if (route) addEvidence(evidence, { type: route.type, source: file.relative, target: route.route, ...base, certainty: "confirmed", details: { observationKind: "filesystem_route", route: route.route, line: 1, featureToken: routeConcept(route.route) } });
-    for (const item of [...extractSymbols(file, base), ...extractRuntimeRoutes(file, base), ...extractMcpTools(file, base), ...extractTests(file, base), ...extractDatabase(file, base)]) addEvidence(evidence, item);
+    for (const item of [...extractSymbols(file, base), ...extractRuntimeRoutes(file, base), ...extractMcpTools(file, base), ...extractTests(file, base), ...extractDatabase(file, base), ...extractUiSignals(file, base), ...extractFrontendRequests(file, base)]) addEvidence(evidence, item);
   }
 
-  return { scanned, repoSnapshot, repoRevision: repoSnapshot.headRevision, observedAt, evidence };
+  return { scanned, observedFiles: scanned.files.map((file) => ({ relative: file.relative, classification: file.classification, sourceHash: file.sourceHash })), repoSnapshot, repoRevision: repoSnapshot.headRevision, observedAt, evidence };
+}
+
+function deriveUnderstandingState(features, evidence, observedFiles, unmappedProductSignals = []) {
+  const appFiles = observedFiles.filter((file) => ["application_source", "ui_entry"].includes(file.classification));
+  const richSignals = [...evidence.values()].filter((item) => ["api", "route", "request", "ui", "database", "test"].includes(item.type));
+  if (!appFiles.length) return { state: "UNSUPPORTED", recommendedNextAction: null };
+  if (Object.keys(features).length) return { state: unmappedProductSignals.length ? "PARTIAL" : "READY", recommendedNextAction: unmappedProductSignals.length ? "PRODUCT_STRUCTURE_PROPOSAL" : null };
+  if (richSignals.length) return { state: "NEEDS_INTERPRETATION", recommendedNextAction: "PRODUCT_STRUCTURE_PROPOSAL" };
+  return { state: "PARTIAL", recommendedNextAction: "PRODUCT_STRUCTURE_PROPOSAL" };
 }
 
 export async function readProductGrounding(projectRoot, options = {}) {
@@ -437,7 +491,7 @@ export async function readProductGrounding(projectRoot, options = {}) {
   }
 }
 
-async function writeProductGrounding(projectRoot, model) {
+export async function persistProductGroundingModel(projectRoot, model) {
   const target = productModelPath(projectRoot);
   await mkdir(path.dirname(target), { recursive: true });
   const temporary = `${target}.${process.pid}.${randomUUID()}.tmp`;
@@ -452,7 +506,8 @@ export async function scanProductGrounding(projectRoot, options = {}) {
   const identity = await projectIdentity(projectRoot);
   const base = { repoRevision: observation.repoRevision, repoSnapshotId: observation.repoSnapshot.workingTreeFingerprint, observedAt: observation.observedAt };
   const evidence = new Map(observation.evidence);
-  const features = inferFeatures(evidence, base);
+  const inferred = inferFeatures(evidence, base);
+  const features = inferred.features;
   const skippedHumanIntent = new Set((options.skipHumanIntentFeatureIds || []).map(String));
   const humanIntent = {
     ...(previous?.humanIntent || { featureCorrections: {} }),
@@ -460,6 +515,7 @@ export async function scanProductGrounding(projectRoot, options = {}) {
   };
   applyHumanIntent(features, evidence, humanIntent, previous, base);
   const productHierarchy = buildProductHierarchy(features, evidence, previous?.productHierarchy, base);
+  const understanding = deriveUnderstandingState(features, evidence, observation.observedFiles, inferred.unmappedProductSignals);
   const rawModel = {
     schemaVersion: MODEL_SCHEMA_VERSION,
     modelType: "ProjectModel",
@@ -469,6 +525,10 @@ export async function scanProductGrounding(projectRoot, options = {}) {
     repoRevision: observation.repoRevision,
     repoSnapshot: observation.repoSnapshot,
     observedAt: observation.observedAt,
+    observedFiles: observation.observedFiles,
+    unmappedProductSignals: inferred.unmappedProductSignals,
+    understandingState: understanding.state,
+    recommendedNextAction: understanding.recommendedNextAction,
     createdAt: previous?.createdAt || observation.observedAt,
     updatedAt: observation.observedAt,
     stats: {
@@ -486,7 +546,7 @@ export async function scanProductGrounding(projectRoot, options = {}) {
     visualLayout: previous?.visualLayout || {},
   };
   const model = formalizeProjectModel(rawModel, observation.repoSnapshot);
-  const file = options.persist === false ? null : await writeProductGrounding(projectRoot, model);
+  const file = options.persist === false ? null : await persistProductGroundingModel(projectRoot, model);
   return { model, path: file };
 }
 
@@ -499,7 +559,7 @@ export async function updateProductLayout(projectRoot, input = {}) {
   model.visualLayout[featureId] = { ...(model.visualLayout[featureId] || {}), ...position };
   model.layoutVersion = Number(model.layoutVersion || 0) + 1;
   model.layoutUpdatedAt = input.now || new Date().toISOString();
-  const file = await writeProductGrounding(projectRoot, model);
+  const file = await persistProductGroundingModel(projectRoot, model);
   return { model, feature: model.features[featureId], path: file };
 }
 
@@ -526,7 +586,7 @@ export async function correctProductFeature(projectRoot, input = {}) {
   if (patch.actionability) patch.actionability = normalizeFeatureActionability(patch.actionability);
   if (!Object.keys(patch).length) throw new ValidationError("At least one supported Feature correction is required.", { featureId });
   if (patch.parentFeatureId && !model.features[patch.parentFeatureId]) throw new ValidationError("Parent Feature does not exist.", { featureId, parentFeatureId: patch.parentFeatureId });
-  if (patch.groupId && !model.productHierarchy?.groups?.[patch.groupId]) throw new ValidationError("Product group does not exist.", { featureId, groupId: patch.groupId });
+  if (patch.groupId && !model.productHierarchy?.groups?.[patch.groupId] && !PRODUCT_GROUPS.some((group) => group.id === patch.groupId)) throw new ValidationError("Product group does not exist.", { featureId, groupId: patch.groupId });
   const now = input.now || new Date().toISOString();
   const current = model.humanIntent?.featureCorrections?.[featureId];
   const correction = {
@@ -577,7 +637,7 @@ export async function correctProductFeature(projectRoot, input = {}) {
   model.stats.evidence = Object.keys(model.evidence).length;
   model.stats.confirmedEvidence = Object.values(model.evidence).filter((item) => item.certainty === "confirmed").length;
   const formalized = formalizeProjectModel(model, model.repoSnapshot);
-  const file = await writeProductGrounding(projectRoot, formalized);
+  const file = await persistProductGroundingModel(projectRoot, formalized);
   return { model: formalized, feature: formalized.features[featureId], correction, path: file };
 }
 

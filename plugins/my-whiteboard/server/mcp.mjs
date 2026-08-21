@@ -28,6 +28,9 @@ import {
   readProductGrounding,
   readWorkspace,
   scanProductGrounding,
+  createProductStructureProposal,
+  getProductStructureProposals,
+  applyProductStructureProposal,
   sendMessage,
   summarizeProductMap,
   syncAgent,
@@ -92,7 +95,7 @@ export const workspaceTools = [
   {
     name: "project_create",
     title: "Create or open a My Whiteboard project",
-    description: "Initialize an Agent-neutral local workspace under <project>/.my-whiteboard. Existing workspaces are returned unchanged.",
+    description: "Initialize an Agent-neutral local workspace under <project>/.my-whiteboard. For 'understand this project' requests, follow with product_grounding_scan, interpret Evidence when needed, product_structure_propose, then workspace_open Product View. Existing workspaces are returned unchanged.",
     inputSchema: { type: "object", properties: { project_root: { type: "string" }, name: { type: "string" }, actor: { type: "object" } }, required: ["project_root"], additionalProperties: false },
     annotations: mutating,
   },
@@ -267,7 +270,7 @@ export const workspaceTools = [
   {
     name: "code_board_create",
     title: "Create a semantic code architecture board",
-    description: "Scan bounded project source files and relative imports, then create code nodes and dependency edges in Semantic Board State.",
+    description: "Explicit code-architecture flow: scan bounded source files and relative imports, then create code nodes and dependency edges. Use only when the user asks for code architecture, files, or dependencies; product understanding uses product_grounding_scan first.",
     inputSchema: { type: "object", properties: { project_root: { type: "string" }, id: { type: "string" }, title: { type: "string" }, max_files: { type: "integer", minimum: 1, maximum: 300 }, actor: { type: "object" } }, required: ["project_root"], additionalProperties: false },
     annotations: mutating,
   },
@@ -281,7 +284,7 @@ export const workspaceTools = [
   {
     name: "product_grounding_scan",
     title: "Scan a product-grounded project model",
-    description: "Build the formal Living ProjectModel v1 from deterministic TS/JS observations, traceable Evidence, RepoSnapshot freshness, Actionability, and a Product Map projection while preserving durable Human Intent corrections.",
+    description: "Product-first deterministic observation for TS/JS Web Apps: include application source, public UI entry HTML, CSS supporting assets, API/fetch routes, tests, and source-level persistence signals. Returns observedFiles, Evidence, unmappedProductSignals, RepoSnapshot, and NEEDS_INTERPRETATION/PARTIAL/READY states; an external Host Agent may follow with product_structure_propose.",
     inputSchema: { type: "object", properties: { project_root: { type: "string" }, max_files: { type: "integer", minimum: 1, maximum: 2000 }, actor: actorSchema }, required: ["project_root"], additionalProperties: false },
     annotations: mutating,
   },
@@ -310,6 +313,34 @@ export const workspaceTools = [
       additionalProperties: false,
     },
     annotations: mutating,
+  },
+  {
+    name: "product_structure_propose",
+    title: "Propose Product Structure from Evidence",
+    description: "An external Host Agent may submit an evidence-backed Product Group and Feature proposal. Proposals remain pending Product Inference and never become Code Truth or Change Targets automatically.",
+    inputSchema: { type: "object", properties: { project_root: { type: "string" }, proposed_by_agent_id: { type: "string" }, base_repo_snapshot_id: { type: "string" }, groups: { type: "array", items: { type: "object" } }, features: { type: "array", items: { type: "object" } }, actor: actorSchema }, required: ["project_root", "features"], additionalProperties: false },
+    annotations: mutating,
+  },
+  {
+    name: "product_structure_proposals_get",
+    title: "Read Product Structure Proposals",
+    description: "Read pending, confirmed, rejected, or superseded Product Structure Proposals and their Evidence provenance.",
+    inputSchema: { type: "object", properties: { project_root: { type: "string" }, status: { type: "string", enum: ["pending", "confirmed", "rejected", "superseded"] } }, required: ["project_root"], additionalProperties: false },
+    annotations: readOnly,
+  },
+  {
+    name: "product_structure_proposal_apply",
+    title: "Confirm or Edit Product Structure Proposal",
+    description: "Apply a Human-controlled confirm, update, or reject action. Confirm is blocked when the bound RepoSnapshot is stale.",
+    inputSchema: { type: "object", properties: { project_root: { type: "string" }, proposal_id: { type: "string" }, expected_version: { type: "integer", minimum: 1 }, action: { type: "string", enum: ["confirm", "update", "reject"] }, patch: { type: "object" }, actor: actorSchema }, required: ["project_root", "proposal_id", "action"], additionalProperties: false },
+    annotations: mutating,
+  },
+  {
+    name: "my_whiteboard_info",
+    title: "Read My Whiteboard Runtime Capabilities",
+    description: "Return machine-readable runtime revision, declared plugin version, schema, tool count, capabilities, supported repo hints, and product-first recommended flows.",
+    inputSchema: { type: "object", properties: { project_root: { type: "string" } }, additionalProperties: false },
+    annotations: readOnly,
   },
   {
     name: "verification_observe",
@@ -541,6 +572,33 @@ export async function callWorkspaceTool(name, args, httpService) {
     const result = await correctProductFeature(args.project_root, { featureId: args.feature_id, expectedVersion: args.expected_version, patch: args.patch, reason: args.reason, actor: args.actor });
     return content(`Feature “${result.feature.name}” corrected as Human Intent at v${result.feature.version}.`, { feature: result.feature, correction: result.correction, productMap: summarizeProductMap(result.model), path: result.path });
   }
+  if (name === "product_structure_propose") {
+    const proposal = await createProductStructureProposal(args.project_root, { projectId: args.project_id, proposedByAgentId: args.proposed_by_agent_id, baseRepoSnapshotId: args.base_repo_snapshot_id, groups: args.groups, features: args.features, now: args.now });
+    return content(`Product Structure Proposal “${proposal.id}” is pending Human confirmation.`, { proposal });
+  }
+  if (name === "product_structure_proposals_get") {
+    const proposals = await getProductStructureProposals(args.project_root, { status: args.status });
+    return content(`${proposals.length} Product Structure Proposal(s) found.`, { proposals });
+  }
+  if (name === "product_structure_proposal_apply") {
+    const result = await applyProductStructureProposal(args.project_root, { proposalId: args.proposal_id, expectedVersion: args.expected_version, action: args.action, patch: args.patch, actor: args.actor, now: args.now });
+    return content(`Product Structure Proposal “${args.proposal_id}” ${args.action} applied.`, result);
+  }
+  if (name === "my_whiteboard_info") {
+    let sourceRevision = null;
+    try { sourceRevision = (await import("node:child_process")).execFileSync("git", ["-C", ROOT, "rev-parse", "HEAD"], { encoding: "utf8", windowsHide: true }).trim() || null; } catch {}
+    const info = {
+      declaredVersion: VERSION,
+      sourceRevision,
+      schemaVersion: 1,
+      toolCount: workspaceTools.length,
+      capabilities: { productGrounding: true, productView: true, productStructureProposal: true, changeExecution: true, hostedExecution: true, verification: true },
+      supportedRepoHints: { fullProductGrounding: [".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".html", ".css"], observedExtensions: [".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".html", ".css", ".prisma", ".sql"], knownUnsupported: ["Python-only product grounding", "SQLite binary parsing"] },
+      toolCategories: { workspace: ["project_create", "project_get", "workspace_get", "workspace_get_changes", "workspace_open"], product: ["product_grounding_scan", "product_grounding_get", "product_feature_correct", "product_structure_propose", "product_structure_proposals_get", "product_structure_proposal_apply"], board: ["board_create", "board_get", "board_apply", "code_board_create", "code_board_analyze"], collaboration: ["agent_connect", "agent_sync", "handoff_create", "handoff_update", "message_send", "messages_get"], change: ["change_create", "change_get"], execution: ["execution_capabilities", "execution_start", "execution_claim", "execution_report", "execution_get", "execution_stop", "execution_resume"], verification: ["verification_observe", "verification_compare"] },
+      recommendedFlows: { understandProject: ["project_create", "product_grounding_scan", "if NEEDS_INTERPRETATION/PARTIAL: host-agent interprets Evidence", "product_structure_propose", "workspace_open Product View"], inspectCodeArchitecture: ["project_create", "code_board_create", "code_board_analyze", "workspace_open Board View"] },
+    };
+    return content(`My Whiteboard runtime ${VERSION} exposes ${workspaceTools.length} tools.`, info);
+  }
   if (name === "verification_observe") {
     const observed = await observeProjectState(args.project_root, { baseRevision: args.base_revision });
     return content(`Observed repository state at ${observed.repo.revision || "no-git-revision"}.`, { observed });
@@ -608,7 +666,7 @@ export function runMcpServer(options = {}) {
     try { request = JSON.parse(line); } catch (error) { failure(null, error); return; }
     const { id, method, params } = request;
     try {
-      if (method === "initialize") return success(id, { protocolVersion: params?.protocolVersion || "2025-11-25", capabilities: { tools: {} }, serverInfo: { name: "My Whiteboard Workspace", version: VERSION }, instructions: "Use project_create with the current project root, then operate on Semantic Board State through batch tools. Read Workspace deltas by version. Use workspace_open for the standalone browser editor; iframe embedding is intentionally disabled." });
+      if (method === "initialize") return success(id, { protocolVersion: params?.protocolVersion || "2025-11-25", capabilities: { tools: {} }, serverInfo: { name: "My Whiteboard Workspace", version: VERSION }, instructions: "For requests to understand a project or its product features, use project_create → product_grounding_scan → if NEEDS_INTERPRETATION/PARTIAL, interpret Evidence as a Host Agent → product_structure_propose → workspace_open Product View. Do not fall back to code_board_create unless the user explicitly asks for code architecture, files, or dependencies. Operate on Semantic Board State through batch tools, read Workspace deltas by version, and use workspace_open for the standalone browser editor; iframe embedding is intentionally disabled." });
       if (method === "notifications/initialized") return;
       if (method === "ping") return success(id, {});
       if (method === "tools/list") return success(id, { tools: workspaceTools });

@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 
@@ -53,7 +54,11 @@ export async function captureRepoSnapshot(projectRoot, files = [], capturedAt = 
   // itself is being updated; source and generated-code changes remain visible.
   const status = await git(root, ["status", "--porcelain", "--untracked-files=all", "--", ".", ":!.my-whiteboard"]);
   const changedFiles = parseChangedFiles(status);
-  const fileHashes = files.map((file) => ({ relative: file.relative, sourceHash: file.sourceHash })).sort((a, b) => a.relative.localeCompare(b.relative));
+  const fileHashes = await Promise.all(files.map(async (file) => {
+    let sourceHash = file.sourceHash;
+    try { sourceHash = createHash("sha256").update(await readFile(path.join(root, file.relative))).digest("hex"); } catch {}
+    return { relative: file.relative, sourceHash };
+  })).then((items) => items.sort((a, b) => a.relative.localeCompare(b.relative)));
   const workingTreeFingerprint = hash(JSON.stringify({ headRevision, status, fileHashes }));
   return {
     schemaVersion: 1,
@@ -101,7 +106,7 @@ export function evaluateActionability(feature, evidenceById = {}, repoSnapshot =
     const confirmed = refs.some((item) => item.certainty === "confirmed" || item.status === "confirmed");
     if (!confirmed) reasons.push("Evidence exists but is not confirmed.");
     const fresh = repoSnapshot.workingTreeFingerprint && refs.some((item) => item.repoSnapshotId === repoSnapshot.workingTreeFingerprint);
-    if (confirmed && fresh && feature.productState !== "unobserved") {
+    if (confirmed && fresh && !["unobserved", "inferred"].includes(feature.productState)) {
       state = "ACTIONABLE";
       reasons.push("Confirmed evidence matches the current RepoSnapshot.");
     } else if (confirmed) reasons.push("Evidence does not match the current RepoSnapshot.");
@@ -245,6 +250,10 @@ export function formalizeProjectModel(model, repoSnapshot = normalizeRepoSnapsho
   normalized.projectModelVersion = PROJECT_MODEL_VERSION;
   normalized.repoSnapshot = clone(repoSnapshot);
   normalized.repoRevision = repoSnapshot.headRevision || normalized.repoRevision || null;
+  normalized.understandingState = normalized.understandingState || (Object.keys(normalized.features || {}).length ? "READY" : (Object.keys(normalized.evidence || {}).length ? "NEEDS_INTERPRETATION" : "UNSUPPORTED"));
+  normalized.recommendedNextAction = normalized.recommendedNextAction || (normalized.understandingState === "NEEDS_INTERPRETATION" || normalized.understandingState === "PARTIAL" ? "PRODUCT_STRUCTURE_PROPOSAL" : null);
+  normalized.observedFiles ||= Object.values(normalized.evidence || {}).filter((item) => item.type === "file").map((item) => ({ relative: item.source, classification: item.details?.classification || "application_source", sourceHash: item.details?.sourceHash || "" }));
+  normalized.unmappedProductSignals ||= [];
   normalized.evidence = Object.fromEntries(Object.entries(normalized.evidence || {}).map(([id, item]) => [id, normalizeEvidenceRecord(item, repoSnapshot)]));
   normalized.humanIntent = clone(normalized.humanIntent || { featureCorrections: {} });
   normalized.humanIntent.featureCorrections ||= {};

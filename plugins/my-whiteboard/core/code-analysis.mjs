@@ -20,7 +20,7 @@ export async function scanProjectGraph(projectRoot, maxFiles = 80) {
       semanticType: "code",
       label: path.basename(relative),
       properties: {
-        code: { file: relative, symbol: "", line: null, kind: "file" },
+        code: { file: relative, symbol: "", line: null, kind: "file", classification: scanned.files[index].classification || "application_source", dependencies: [], reverseDependencies: [] },
         status: "todo",
         riskTags: [],
         testRefs: [],
@@ -30,11 +30,15 @@ export async function scanProjectGraph(projectRoot, maxFiles = 80) {
     });
   }
   const edgeIds = new Set();
+  const dependencies = new Map(relativeFiles.map((file) => [file, new Set()]));
+  const reverseDependencies = new Map(relativeFiles.map((file) => [file, new Set()]));
   for (const [index, file] of scanned.files.entries()) {
     const relative = relativeFiles[index];
     for (const dependency of file.imports) {
       const target = dependency.target;
       if (!target || target === relative) continue;
+      dependencies.get(relative)?.add(target);
+      reverseDependencies.get(target)?.add(relative);
       const edgeId = `dependency-${byFile.get(relative)}-${byFile.get(target)}`.slice(0, 120);
       if (edgeIds.has(edgeId)) continue;
       edgeIds.add(edgeId);
@@ -47,6 +51,11 @@ export async function scanProjectGraph(projectRoot, maxFiles = 80) {
         layout: { x: 0, y: 0, width: 160, height: 1 },
       });
     }
+  }
+  for (const node of elements.filter((element) => element.semanticType === "code")) {
+    const file = node.properties?.code?.file;
+    node.properties.code.dependencies = [...(dependencies.get(file) || [])].sort();
+    node.properties.code.reverseDependencies = [...(reverseDependencies.get(file) || [])].sort();
   }
   return { root: scanned.root, files: relativeFiles, elements, config: scanned.config, aliases: scanned.aliases };
 }

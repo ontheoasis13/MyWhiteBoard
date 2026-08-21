@@ -3,7 +3,7 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 
 export const SOURCE_EXTENSIONS = new Set([".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx"]);
-export const OBSERVATION_EXTENSIONS = new Set([...SOURCE_EXTENSIONS, ".prisma", ".sql"]);
+export const OBSERVATION_EXTENSIONS = new Set([...SOURCE_EXTENSIONS, ".html", ".css", ".prisma", ".sql"]);
 
 const EXCLUDED_DIRECTORIES = new Set([
   ".git",
@@ -23,11 +23,27 @@ const EXCLUDED_DIRECTORIES = new Set([
   "generated",
   "node_modules",
   "out",
-  "public",
   "storybook-static",
   "vendor",
   "venv",
 ]);
+
+const GENERATED_FILE_PATTERNS = [/\.min\.(?:js|css)$/i, /(?:^|[-_.])(bundle|chunk|generated|compiled)(?:[-_.]|$)/i];
+const BINARY_EXTENSIONS = new Set([".sqlite", ".sqlite3", ".db", ".db3", ".woff", ".woff2", ".ttf", ".eot", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico"]);
+
+export function classifySourceFile(relative, source = "") {
+  const normalized = String(relative || "").replaceAll("\\", "/");
+  const lower = normalized.toLowerCase();
+  const extension = path.extname(lower);
+  if (BINARY_EXTENSIONS.has(extension)) return "binary_dependency";
+  if (/(^|\/)(vendor|node_modules)(\/|$)/.test(lower)) return "vendor";
+  if (/(^|\/)(generated|dist|build|out|coverage)(\/|$)/.test(lower) || GENERATED_FILE_PATTERNS.some((pattern) => pattern.test(lower))) return "generated";
+  if (/(^|\/)(test|tests|__tests__)(\/|$)|\.(test|spec)\.[cm]?[jt]sx?$/.test(lower)) return "test";
+  if (extension === ".html") return "ui_entry";
+  if (extension === ".css") return "supporting_asset";
+  if (SOURCE_EXTENSIONS.has(extension)) return "application_source";
+  return source ? "application_source" : "binary_dependency";
+}
 
 const RESOLUTION_EXTENSIONS = [".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx"];
 
@@ -146,7 +162,9 @@ export async function collectProjectFiles(projectRoot, options = {}) {
         await visit(absolute);
         continue;
       }
-      if (!extensions.has(path.extname(entry.name).toLowerCase())) continue;
+      const extension = path.extname(entry.name).toLowerCase();
+      if (!extensions.has(extension)) continue;
+      if (GENERATED_FILE_PATTERNS.some((pattern) => pattern.test(entry.name))) continue;
       try {
         if ((await stat(absolute)).size <= maxBytes) discovered.push(absolute);
       } catch {}
@@ -180,6 +198,7 @@ export async function scanProjectSources(projectRoot, options = {}) {
       ...item,
       source,
       sourceHash: createHash("sha256").update(source).digest("hex"),
+      classification: classifySourceFile(item.relative, source),
       imports,
     });
   }
