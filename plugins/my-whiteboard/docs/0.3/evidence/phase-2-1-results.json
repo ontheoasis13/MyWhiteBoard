@@ -2,6 +2,7 @@
   "phase": "2.1",
   "verdict": "TECHNICAL_READY_REAL_WORKBUDDY_ACCEPTANCE_PENDING",
   "baseline": "c50554229981ec5bac72b19cb8e6b4484f40bcd0",
+  "implementationHeadBeforeEvidenceCommit": "eea89765ebbfb535e115c69bb716e82a2f5d7237",
   "declaredVersion": "0.2.0-alpha.3",
   "protectedTagCommit": "8f7213990982b33c71e05445fa39013ca1ed83df",
   "mcpToolCount": 46,
@@ -34,5 +35,6 @@
   "productView": { "states": ["READY", "PARTIAL", "NEEDS_INTERPRETATION", "UNSUPPORTED", "FAILED"], "pendingProposalUi": true },
   "boardNodeInspector": { "selectionBridge": true, "codeSemantics": true, "relatedProductFeatures": true, "legacyCanvasReused": false },
   "centralSoeFreshScan": { "status": "NOT_AVAILABLE_IN_CODEX_CHECKOUT", "path": null, "note": "Requires fresh WorkBuddy validation environment." },
+  "timing": { "testsSecondsApprox": 4.9, "typecheckSecondsApprox": 0.7, "buildSecondsApprox": 1.1, "mcpSmokeSecondsApprox": 12.0, "fixtureScanSecondsApprox": 0.3 },
   "externalAcceptance": { "workbuddyGoldenPath": "PENDING", "humanUx": "PENDING" }
 }

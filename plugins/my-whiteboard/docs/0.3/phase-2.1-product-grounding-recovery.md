@@ -12,6 +12,7 @@
 
 - 分支：`agent/v0.3-control-loop`
 - 开工基线：`c50554229981ec5bac72b19cb8e6b4484f40bcd0`
+- 技术实现提交（证据提交前）：`eea89765ebbfb535e115c69bb716e82a2f5d7237`
 - 当前插件声明版本：`0.2.0-alpha.3`（未修改）
 - `v0.3-proofs-pass` 的 peeled commit：`8f7213990982b33c71e05445fa39013ca1ed83df`（未移动）
 
