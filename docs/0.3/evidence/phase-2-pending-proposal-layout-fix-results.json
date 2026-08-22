@@ -1,0 +1,61 @@
+{
+  "phase": "2-pending-proposal-layout-fix",
+  "status": "PASS",
+  "phase3": "HOLD",
+  "baselineHead": "3e926b7",
+  "implementationHead": "91e4da0",
+  "rootCause": {
+    "dom": "global-proposal is a direct child of product-shell",
+    "css": "missing explicit grid-column/grid-row caused auto-placement into product-sidebar column",
+    "observedEffect": "Chinese proposal text collapsed into a vertical strip"
+  },
+  "minimalFix": {
+    "file": "plugins/my-whiteboard/apps/workspace/src/styles.css",
+    "selector": ".global-proposal",
+    "gridColumn": 2,
+    "gridRow": 2,
+    "minWidth": "0",
+    "ctaFlex": "0 0 auto",
+    "businessLogicChanged": false
+  },
+  "browserEvidence": {
+    "desktop": {
+      "viewport": { "width": 1280, "height": 720 },
+      "productMainWidth": 732,
+      "proposalWidth": 688,
+      "proposalHeight": 60,
+      "proposalWidthRatio": 0.94,
+      "ctaWithinCard": true,
+      "screenshot": "docs/0.3/evidence/screenshots/phase2-pending-proposal-layout/pending-desktop.png"
+    },
+    "narrowDesktop": {
+      "viewport": { "width": 1024, "height": 720 },
+      "productMainWidth": 552,
+      "proposalWidth": 508,
+      "proposalHeight": 88,
+      "normalTwoLineTitle": true,
+      "ctaWithinCard": true,
+      "screenshot": "docs/0.3/evidence/screenshots/phase2-pending-proposal-layout/pending-narrow.png"
+    },
+    "confirmed": {
+      "lifecycleState": "CONFIRMED",
+      "proposalDisappears": true,
+      "productMapRemains": true,
+      "screenshot": "docs/0.3/evidence/screenshots/phase2-pending-proposal-layout/confirmed.png"
+    }
+  },
+  "regression": {
+    "layoutContract": "passed",
+    "stateCoherenceT1T6": "passed",
+    "tests": { "passed": 74, "failed": 0 },
+    "typecheck": "passed",
+    "build": "passed",
+    "mcpSmoke": { "passed": true, "tools": 46 },
+    "servedAssets": "updated",
+    "repoClean": true
+  },
+  "scope": {
+    "changed": ["Product View served CSS", "layout integration regression contract", "served assets", "evidence"],
+    "unchanged": ["lifecycle", "freshness", "grounding", "ProductModel", "MCP schema", "approval boundary", "Feature Inspector", "Technical Board", "Change Planning", "Phase 3"]
+  }
+}
