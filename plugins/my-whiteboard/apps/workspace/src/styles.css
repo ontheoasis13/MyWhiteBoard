@@ -140,8 +140,9 @@ button { cursor: pointer; }
 .interpretation-banner strong, .proposal-card strong { display: block; font-size: 12px; }
 .interpretation-banner span, .proposal-card span { display: block; margin-top: 4px; color: #8a7a9f; font-size: 10px; }
 .proposal-hint { white-space: nowrap; font-weight: 800; font-size: 10px; }
-.global-proposal { position: relative; z-index: 2; margin: 10px 22px 0 270px; }
-.proposal-actions { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.global-proposal { grid-column: 2; grid-row: 2; position: relative; z-index: 2; min-width: 0; align-self: start; margin: 10px 22px 0; }
+.proposal-card > div:first-child { min-width: 0; flex: 1 1 320px; }
+.proposal-actions { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; white-space: nowrap; }
 .node-selected > :not(.node-inspector) { display: none; }
 .node-inspector .primary-button { margin-top: 8px; width: 100%; }
 .section-heading-row { display: flex; justify-content: space-between; align-items: baseline; }
