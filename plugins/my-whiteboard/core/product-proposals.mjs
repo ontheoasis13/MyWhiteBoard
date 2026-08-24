@@ -2,8 +2,8 @@ import { readFile, writeFile, mkdir, rename } from "node:fs/promises";
 import path from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { ConflictError, NotFoundError, ValidationError } from "./errors.mjs";
-import { withWorkspaceLock } from "./store.mjs";
-import { formalizeProjectModel } from "./project-model.mjs";
+import { createProjectWorkspace, readWorkspace, withWorkspaceLock } from "./store.mjs";
+import { captureRepoSnapshot, formalizeProjectModel } from "./project-model.mjs";
 import { persistProductGroundingModel, readProductGrounding } from "./product-grounding.mjs";
 
 const SCHEMA_VERSION = 1;
@@ -15,6 +15,40 @@ function proposalPath(projectRoot) {
 function clone(value) { return value === undefined ? undefined : JSON.parse(JSON.stringify(value)); }
 function stable(value) { return JSON.stringify(value, Object.keys(value || {}).sort()); }
 function ensureArray(value) { return Array.isArray(value) ? value : []; }
+
+async function ensurePlannedProjectModel(projectRoot) {
+  const existing = await readProductGrounding(projectRoot, { optional: true, refreshSnapshot: false });
+  if (existing) return existing;
+  await createProjectWorkspace(projectRoot, { name: path.basename(path.resolve(projectRoot)) });
+  const workspace = await readWorkspace(projectRoot);
+  const now = new Date().toISOString();
+  const repoSnapshot = await captureRepoSnapshot(projectRoot, [], now);
+  const raw = {
+    schemaVersion: 1,
+    modelType: "ProjectModel",
+    projectModelVersion: 1,
+    version: 1,
+    project: { id: workspace.project.id, name: workspace.project.name, root: "." },
+    repoRevision: repoSnapshot.headRevision,
+    repoSnapshot,
+    observedAt: now,
+    observedFiles: [],
+    unmappedProductSignals: [],
+    understandingState: "PARTIAL",
+    recommendedNextAction: null,
+    createdAt: now,
+    updatedAt: now,
+    stats: { scannedFiles: 0, resolvedReferences: 0, features: 0, evidence: 0, confirmedEvidence: 0, possibleEvidence: 0 },
+    features: {},
+    evidence: {},
+    humanIntent: { featureCorrections: {} },
+    productHierarchy: { version: 1, levels: 2, roots: [], groups: {} },
+    visualLayout: {},
+  };
+  const model = formalizeProjectModel(raw, repoSnapshot);
+  await persistProductGroundingModel(projectRoot, model);
+  return model;
+}
 
 async function readStore(projectRoot) {
   try { return JSON.parse(await readFile(proposalPath(projectRoot), "utf8")); }
@@ -71,6 +105,8 @@ function normalizePayload(model, input) {
 // relationship input. Group member lists are derived by Core after validation.
 function normalizePayloadStrict(model, input) {
   assertProject(model, input.projectId);
+  const basis = String(input.basis || input.proposalBasis || "OBSERVED_EVIDENCE").toUpperCase();
+  if (!["OBSERVED_EVIDENCE", "PLANNED_INTENT"].includes(basis)) throw new ValidationError(`Unsupported Product Structure Proposal basis: ${basis}`);
   const groups = ensureArray(input.groups).map((group, index) => {
     if (!group || typeof group !== "object") throw new ValidationError("Each proposed Product Group must be an object.");
     if (ensureArray(group.memberFeatureKeys).map(String).filter(Boolean).length) throw new ValidationError("FeatureProposal.groupKey is the only authoritative group relation; do not submit group memberFeatureKeys.");
@@ -86,7 +122,7 @@ function normalizePayloadStrict(model, input) {
     proposalKey: String(feature?.proposalKey || feature?.key || `feature-${index + 1}`).trim(),
     name: String(feature?.name || "").trim(),
     description: String(feature?.description || "").trim(),
-    evidenceRefs: validateEvidence(model, feature?.evidenceRefs),
+    evidenceRefs: basis === "PLANNED_INTENT" ? ensureArray(feature?.evidenceRefs).map(String).filter(Boolean) : validateEvidence(model, feature?.evidenceRefs),
     groupKey: feature?.groupKey ? String(feature.groupKey).trim() : null,
     parentFeatureKey: feature?.parentFeatureKey ? String(feature.parentFeatureKey).trim() : null,
     rationale: String(feature?.rationale || "").trim(),
@@ -103,7 +139,7 @@ function normalizePayloadStrict(model, input) {
   }
   if (groups.length && !features.some((feature) => feature.groupKey)) throw new ValidationError("你创建了产品分组，但没有任何功能关联到这些分组。");
   for (const group of groups) group.memberFeatureKeys = features.filter((feature) => feature.groupKey === group.proposalKey).map((feature) => feature.proposalKey);
-  return { groups, features };
+  return { basis, groups, features };
 }
 
 export async function getProductStructureProposals(projectRoot, options = {}) {
@@ -113,19 +149,23 @@ export async function getProductStructureProposals(projectRoot, options = {}) {
 }
 
 export async function createProductStructureProposal(projectRoot, input = {}) {
-  const model = await readProductGrounding(projectRoot);
+  const requestedBasis = String(input.basis || input.proposalBasis || "OBSERVED_EVIDENCE").toUpperCase();
+  const model = requestedBasis === "PLANNED_INTENT"
+    ? await ensurePlannedProjectModel(projectRoot)
+    : await readProductGrounding(projectRoot);
   const baseRepoSnapshotId = String(input.baseRepoSnapshotId || input.base_repo_snapshot_id || model.repoSnapshot?.workingTreeFingerprint || "");
-  if (!baseRepoSnapshotId || baseRepoSnapshotId !== model.repoSnapshot?.workingTreeFingerprint) throw new ConflictError("Proposal must be bound to the current RepoSnapshot.", { expected: baseRepoSnapshotId, actual: model.repoSnapshot?.workingTreeFingerprint });
+  if (requestedBasis === "OBSERVED_EVIDENCE" && (!baseRepoSnapshotId || baseRepoSnapshotId !== model.repoSnapshot?.workingTreeFingerprint)) throw new ConflictError("Proposal must be bound to the current RepoSnapshot.", { expected: baseRepoSnapshotId, actual: model.repoSnapshot?.workingTreeFingerprint });
   const payload = normalizePayloadStrict(model, input);
   return withWorkspaceLock(projectRoot, async () => {
     const store = await readStore(projectRoot);
-    const signature = createHash("sha256").update(JSON.stringify({ projectId: model.project.id, baseRepoSnapshotId, groups: payload.groups, features: payload.features })).digest("hex");
+    const signature = createHash("sha256").update(JSON.stringify({ projectId: model.project.id, basis: payload.basis, baseRepoSnapshotId, groups: payload.groups, features: payload.features })).digest("hex");
     const duplicate = Object.values(store.proposals || {}).find((proposal) => proposal.signature === signature && ["pending", "confirmed"].includes(proposal.status));
     if (duplicate) throw new ConflictError("An equivalent Product Structure Proposal already exists.", { proposalId: duplicate.id });
     const now = input.now || new Date().toISOString();
     const proposedByAgentId = String(input.proposedByAgentId || input.proposed_by_agent_id || "host-agent");
     for (const previous of Object.values(store.proposals || {})) {
-      if (previous.status === "pending" && previous.projectId === model.project.id && previous.proposedByAgentId === proposedByAgentId && previous.baseRepoSnapshotId === baseRepoSnapshotId) {
+      const samePlannedProject = payload.basis === "PLANNED_INTENT" && previous.basis === "PLANNED_INTENT";
+      if (previous.status === "pending" && previous.projectId === model.project.id && previous.proposedByAgentId === proposedByAgentId && (samePlannedProject || previous.baseRepoSnapshotId === baseRepoSnapshotId)) {
         previous.status = "superseded";
         previous.staleReason = "REPLACED_BY_NEW_PROPOSAL";
         previous.updatedAt = now;
@@ -135,6 +175,7 @@ export async function createProductStructureProposal(projectRoot, input = {}) {
     const proposal = {
       id: String(input.id || `proposal-${randomUUID()}`),
       projectId: model.project.id,
+      basis: payload.basis,
       baseRepoSnapshotId,
       proposedByAgentId,
       status: "pending",
@@ -144,7 +185,7 @@ export async function createProductStructureProposal(projectRoot, input = {}) {
       createdAt: now,
       updatedAt: now,
       version: 1,
-      provenance: { kind: "product_inference", certainty: "possible", evidenceRefs: [...new Set(payload.features.flatMap((feature) => feature.evidenceRefs))] },
+      provenance: { kind: payload.basis === "PLANNED_INTENT" ? "agent_reported_product_plan" : "product_inference", certainty: payload.basis === "PLANNED_INTENT" ? "reported" : "possible", evidenceRefs: [...new Set(payload.features.flatMap((feature) => feature.evidenceRefs))] },
     };
     store.proposals ||= {};
     store.proposals[proposal.id] = proposal;
@@ -178,7 +219,7 @@ export async function applyProductStructureProposal(projectRoot, input = {}) {
       const patch = input.patch || {};
       const proposalGroups = patch.groups || proposal.groups;
       const groups = proposalGroups.map(({ memberFeatureKeys: _derivedMembers, ...group }) => group);
-      const payload = normalizePayloadStrict(model, { ...proposal, ...patch, groups });
+      const payload = normalizePayloadStrict(model, { ...proposal, ...patch, basis: proposal.basis, groups });
       Object.assign(proposal, payload, { updatedAt: now, version: proposal.version + 1 });
       proposal.provenance.evidenceRefs = [...new Set(payload.features.flatMap((feature) => feature.evidenceRefs))];
       await writeStore(projectRoot, store); return clone(proposal);
@@ -186,7 +227,7 @@ export async function applyProductStructureProposal(projectRoot, input = {}) {
     if (action !== "confirm") throw new ValidationError("Proposal action must be confirm, update, or reject.");
     if (proposal.status !== "pending") throw new ConflictError("Only pending proposals can be confirmed.", { proposalId, status: proposal.status });
     const model = await readProductGrounding(projectRoot);
-    if (model.repoSnapshot?.workingTreeFingerprint !== proposal.baseRepoSnapshotId) {
+    if (proposal.basis !== "PLANNED_INTENT" && model.repoSnapshot?.workingTreeFingerprint !== proposal.baseRepoSnapshotId) {
       proposal.status = "superseded"; proposal.staleReason = "REPO_SNAPSHOT_STALE"; proposal.updatedAt = now; proposal.version += 1;
       await writeStore(projectRoot, store);
       throw new ConflictError("Proposal is stale and cannot be silently confirmed.", { proposalId, status: proposal.status, expected: proposal.baseRepoSnapshotId, actual: model.repoSnapshot?.workingTreeFingerprint });
@@ -202,7 +243,7 @@ export async function applyProductStructureProposal(projectRoot, input = {}) {
     for (const item of proposal.features) {
       const id = `feature-proposed-${item.proposalKey}`;
       const group = proposal.groups.find((candidate) => candidate.proposalKey === item.groupKey);
-      model.features[id] = { id, entityType: "feature", version: 1, name: item.name, description: item.description, rationale: item.rationale || "", explicitlyUngrouped: item.explicitlyUngrouped === true, parentFeatureId: item.parentFeatureKey ? `feature-proposed-${item.parentFeatureKey}` : null, childFeatureIds: [], groupId: group ? `group-proposed-${group.proposalKey}` : null, productState: "inferred", groundingRefs: [...item.evidenceRefs], humanIntent: { confirmedFromProposal: proposal.id, confirmedAt: now }, actionability: "GROUNDED", hidden: false, updatedAt: now };
+      model.features[id] = { id, entityType: "feature", version: 1, name: item.name, description: item.description, rationale: item.rationale || "", explicitlyUngrouped: item.explicitlyUngrouped === true, parentFeatureId: item.parentFeatureKey ? `feature-proposed-${item.parentFeatureKey}` : null, childFeatureIds: [], groupId: group ? `group-proposed-${group.proposalKey}` : null, productState: proposal.basis === "PLANNED_INTENT" ? "planned" : "inferred", groundingRefs: proposal.basis === "PLANNED_INTENT" ? [] : [...item.evidenceRefs], humanIntent: { confirmedFromProposal: proposal.id, confirmedAt: now }, actionability: proposal.basis === "PLANNED_INTENT" ? "UNDERSTOOD" : "GROUNDED", hidden: false, updatedAt: now };
       featureIds.push(id);
       if (group) model.productHierarchy.groups[`group-proposed-${group.proposalKey}`].featureIds.push(id);
     }

@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, writeFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import { ConflictError, NotFoundError, ValidationError } from "./errors.mjs";
@@ -507,6 +507,71 @@ export async function persistProductGroundingModel(projectRoot, model) {
   return target;
 }
 
+/**
+ * Bridge Agent-reported implementation references to fresh deterministic repo
+ * evidence. File existence/hash is OBSERVED; the semantic Feature association
+ * remains AGENT_REPORTED and is never treated as behavioural verification.
+ */
+export async function bridgeImplementationEvidence(projectRoot, input = {}) {
+  const model = await readProductGrounding(projectRoot);
+  const featureIds = [...new Set((input.featureIds || input.feature_ids || []).map(String).filter(Boolean))];
+  const references = Array.isArray(input.references || input.evidence) ? (input.references || input.evidence) : [];
+  const observedAt = new Date().toISOString();
+  const observed = [];
+  const rejected = [];
+  const root = path.resolve(projectRoot);
+  const bySource = Object.values(model.evidence || {}).filter((item) => item.type === "file" && item.source).reduce((map, item) => map.set(String(item.source).replaceAll("\\", "/"), item), new Map());
+  const targetFeatures = featureIds.map((id) => model.features[id]).filter(Boolean);
+  for (const reference of references) {
+    const rawPath = typeof reference === "string" ? reference : reference?.path || reference?.source;
+    const relative = String(rawPath || "").replaceAll("\\", "/").replace(/^\.\//, "");
+    if (!relative || relative.startsWith("/") || relative.split("/").includes("..")) {
+      rejected.push({ reference: clone(reference), reason: "INVALID_RELATIVE_PATH" });
+      continue;
+    }
+    const absolute = path.resolve(root, relative);
+    if (!(absolute === root || absolute.startsWith(`${root}${path.sep}`))) {
+      rejected.push({ reference: clone(reference), reason: "PATH_OUTSIDE_PROJECT" });
+      continue;
+    }
+    let info;
+    try { info = await stat(absolute); } catch { info = null; }
+    if (!info?.isFile()) {
+      rejected.push({ reference: clone(reference), reason: "FILE_NOT_OBSERVED", path: relative });
+      continue;
+    }
+    const sourceHash = createHash("sha256").update(await readFile(absolute)).digest("hex");
+    const existing = bySource.get(relative);
+    const evidenceId = existing?.id || `evidence-implementation-${shortHash(`${relative}:${sourceHash}`, 20)}`;
+    const evidence = {
+      ...(existing || {}),
+      id: evidenceId,
+      type: "file",
+      kind: "implementation",
+      source: relative,
+      repoSnapshotId: model.repoSnapshot?.workingTreeFingerprint || null,
+      observedAt,
+      certainty: existing?.certainty || "possible",
+      status: existing?.status || "possible",
+      details: { ...(existing?.details || {}), classification: existing?.details?.classification || "application_source", sourceHash, observationKind: "implementation_evidence_bridge" },
+      provenance: { ...(existing?.provenance || {}), physical: "OBSERVED", semanticAssociation: "AGENT_REPORTED", agentId: input.agentId || input.agent_id || null },
+    };
+    model.evidence[evidenceId] = evidence;
+    observed.push({ evidenceId, path: relative, sourceHash, physical: "OBSERVED", semanticAssociation: "AGENT_REPORTED", featureIds: featureIds.filter((id) => model.features[id]) });
+    for (const feature of targetFeatures) {
+      feature.groundingRefs = [...new Set([...(feature.groundingRefs || []), evidenceId])];
+      feature.groundingProvenance = { ...(feature.groundingProvenance || {}), [evidenceId]: { physical: "OBSERVED", semanticAssociation: "AGENT_REPORTED", agentId: input.agentId || input.agent_id || null, observedAt } };
+    }
+  }
+  model.stats ||= {};
+  model.stats.evidence = Object.keys(model.evidence || {}).length;
+  model.stats.confirmedEvidence = Object.values(model.evidence || {}).filter((item) => item.certainty === "confirmed").length;
+  model.stats.possibleEvidence = Object.values(model.evidence || {}).filter((item) => item.certainty === "possible").length;
+  const formalized = formalizeProjectModel(model, model.repoSnapshot);
+  await persistProductGroundingModel(projectRoot, formalized);
+  return { model: formalized, observed, rejected };
+}
+
 export async function scanProductGrounding(projectRoot, options = {}) {
   const previous = await readProductGrounding(projectRoot, { optional: true });
   const observation = await observeProductGrounding(projectRoot, options);
@@ -692,6 +757,7 @@ export function summarizeProductMap(model) {
           inferenceRefs: group.inferenceRefs,
           certainty: "possible",
         })),
+      ungroupedFeatureIds: Object.values(model.features || {}).filter((feature) => !feature.hidden && !feature.groupId).map((feature) => feature.id),
     },
     stats: model.stats,
   };

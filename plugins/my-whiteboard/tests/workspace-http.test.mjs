@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import os from "node:os";
 import path from "node:path";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
-import { applyWorkspaceTransaction, createBoardEntity, createProjectWorkspace } from "../core/index.mjs";
+import { applyWorkspaceTransaction, createBoardEntity, createProjectWorkspace, startDevelopment } from "../core/index.mjs";
 import { createWorkspaceHttpService } from "../server/workspace-http.mjs";
 import { launchStandaloneWorkspace } from "../server/workspace-launcher.mjs";
 
@@ -37,6 +37,17 @@ test("serves a token-protected standalone workspace and Product View data", asyn
     assert.equal(productPayload.model.modelType, "ProjectModel");
     assert.ok(productPayload.model.productMapProjection);
     assert.ok(["READY", "PARTIAL", "FAILED"].includes(productPayload.status));
+
+    const started = await startDevelopment(projectRoot, { goal: "Add health endpoint", event_id: "http-start", actor: { id: "codex", client: "codex" } });
+    const development = await fetch(`${url.origin}/api/session/development`, { headers });
+    assert.equal(development.status, 200);
+    const developmentPayload = await development.json();
+    assert.equal(developmentPayload.primaryDevelopment.status, "IN_PROGRESS");
+    const detail = await fetch(`${url.origin}/api/session/development/${started.change.id}`, { headers });
+    assert.equal((await detail.json()).change.id, started.change.id);
+    const accepted = await fetch(`${url.origin}/api/session/development/${started.change.id}/accept`, { method: "POST", headers: { ...headers, "content-type": "application/json" }, body: JSON.stringify({ expected_change_version: started.change.version }) });
+    assert.equal(accepted.status, 200);
+    assert.equal((await accepted.json()).development.status, "ACCEPTED");
 
     const transaction = await fetch(`${url.origin}/api/session/transaction`, { method: "POST", headers: { ...headers, "content-type": "application/json" }, body: JSON.stringify({ operations: [{ type: "board.apply", boardId: "main", changes: [{ op: "create", element: { id: "node-1", kind: "node", semanticType: "concept", label: "Selected" } }] }] }) });
     assert.equal(transaction.status, 200);

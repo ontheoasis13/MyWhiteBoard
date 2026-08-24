@@ -239,6 +239,9 @@ export function projectMapProjection(model = {}) {
         inferenceRefs: group.inferenceRefs,
         certainty: "possible",
       })),
+      // Presentation-only bucket; it is intentionally not a semantic Product
+      // Group and cannot become a Change target.
+      ungroupedFeatureIds: Object.values(model.features || {}).filter((feature) => !feature.hidden && !feature.groupId).map((feature) => feature.id),
     },
     visualLayout: clone(model.visualLayout || {}),
     layoutAuthority: "visual-arrangement-only",

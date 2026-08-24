@@ -47,7 +47,7 @@ try {
   const initialized = await request("initialize", { protocolVersion: "2025-11-25", capabilities: {} });
   assert(initialized.result?.serverInfo?.name === "My Whiteboard Workspace", "initialize failed");
   const listed = await request("tools/list");
-  assert(listed.result.tools.length === 46, "unexpected workspace tool count");
+  assert(listed.result.tools.length === 50, "unexpected workspace tool count");
   assert(listed.result.tools.some((tool) => tool.name === "verification_observe"), "verification observe tool missing");
   assert(listed.result.tools.some((tool) => tool.name === "verification_compare"), "verification compare tool missing");
   assert(listed.result.tools.every((tool) => !tool._meta?.["openai/outputTemplate"]), "iframe output template remains");

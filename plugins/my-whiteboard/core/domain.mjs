@@ -43,7 +43,10 @@ export async function connectAgent(projectRoot, input, actor = input) {
     capabilities: Array.isArray(input?.capabilities) ? input.capabilities.map(String) : [],
     metadata: clone(input?.metadata || {}),
     lastSeenAt: now,
+    lastSyncAt: now,
     lastActivityAt: now,
+    connectionState: ["CONNECTED", "DISCONNECTED", "UNKNOWN"].includes(String(input?.connectionState || "").toUpperCase()) ? String(input.connectionState).toUpperCase() : "UNKNOWN",
+    connectionStateSource: String(input?.connectionStateSource || input?.connection_source || "").trim() || null,
   };
   if (!agent.id) throw new ValidationError("Agent id is required.");
   for (let attempt = 0; attempt < 3; attempt += 1) {

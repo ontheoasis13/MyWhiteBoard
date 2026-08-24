@@ -37,6 +37,10 @@ import {
   updateHandoff,
   observeProjectState,
   compareDesiredObserved,
+  getDevelopmentContext,
+  startDevelopment,
+  updateDevelopment,
+  reportDevelopmentResult,
   workspacePaths,
 } from "../core/index.mjs";
 import { exportSemanticBoard } from "../export/semantic-export.mjs";
@@ -49,7 +53,7 @@ const VERSION = JSON.parse(await readFile(path.join(ROOT, ".codex-plugin", "plug
 const readOnly = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
 const mutating = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false };
 const actorSchema = { type: "object", properties: { id: { type: "string" }, displayName: { type: "string" }, client: { type: "string" } }, required: ["id"], additionalProperties: true };
-const agentSchema = { type: "object", properties: { id: { type: "string" }, displayName: { type: "string" }, client: { type: "string" }, status: { type: "string", enum: ["connected", "idle", "working", "offline", "error"] }, capabilities: { type: "array", items: { type: "string" } }, metadata: { type: "object" } }, required: ["id", "displayName", "client"], additionalProperties: false };
+const agentSchema = { type: "object", properties: { id: { type: "string" }, displayName: { type: "string" }, client: { type: "string" }, status: { type: "string", enum: ["connected", "idle", "working", "offline", "error"] }, capabilities: { type: "array", items: { type: "string" } }, metadata: { type: "object" }, connectionState: { type: "string", enum: ["CONNECTED", "DISCONNECTED", "UNKNOWN", "connected", "disconnected", "unknown"] }, connectionStateSource: { type: "string" } }, required: ["id", "displayName", "client"], additionalProperties: false };
 const taskStatusSchema = { type: "string", enum: ["todo", "in_progress", "blocked", "done", "cancelled"] };
 const domainChangeSchema = {
   oneOf: [
@@ -90,6 +94,8 @@ const messageSchema = { type: "object", properties: { id: { type: "string" }, fr
 const changeEntitySchema = { type: "object", properties: { id: { type: "string" }, title: { type: "string" }, featureId: { type: ["string", "null"] }, intent: { type: "string" }, status: { type: "string", enum: ["draft", "approved", "executing", "completed", "interrupted", "failed", "cancelled"] }, contract: { type: "object" }, desiredState: { type: "object" }, acceptanceCriteria: { type: "array", items: { type: "string" } }, constraints: { type: "array", items: { type: "string" } }, relatedEntityRefs: { type: "array", items: { type: "object" } } }, additionalProperties: true };
 const executionAdapterSchema = { type: "object", properties: { kind: { type: "string", enum: ["process"] }, adapterId: { type: "string" }, command: { type: "string" }, args: { type: "array", items: { type: "string" } }, env: { type: "object" } }, required: ["command"], additionalProperties: false };
 const hostedExecutionReportStatusSchema = { type: "string", enum: ["running", "interrupted", "failed", "completed", "cancelled"] };
+const developmentStatusSchema = { type: "string", enum: ["IN_PROGRESS", "WAITING_FOR_USER", "VERIFYING", "READY_FOR_REVIEW", "ACCEPTED", "PAUSED"] };
+const developmentActorSchema = { type: "object", properties: { id: { type: "string" }, displayName: { type: "string" }, client: { type: "string" }, identityTrust: { type: "string" } }, required: ["id"], additionalProperties: true };
 
 export const workspaceTools = [
   {
@@ -317,8 +323,8 @@ export const workspaceTools = [
   {
     name: "product_structure_propose",
     title: "Propose Product Structure from Evidence",
-    description: "An external Host Agent may submit an evidence-backed Product Group and Feature proposal. Proposals remain pending Product Inference and never become Code Truth or Change Targets automatically.",
-    inputSchema: { type: "object", properties: { project_root: { type: "string" }, proposed_by_agent_id: { type: "string" }, base_repo_snapshot_id: { type: "string" }, groups: { type: "array", items: { type: "object" } }, features: { type: "array", items: { type: "object" } }, actor: actorSchema }, required: ["project_root", "features"], additionalProperties: false },
+    description: "An external Host Agent may submit an OBSERVED_EVIDENCE or PLANNED_INTENT Product Structure proposal. Planned proposals may contain zero Evidence and remain pending Human confirmation; neither mode becomes Code Truth or a Change Target automatically.",
+    inputSchema: { type: "object", properties: { project_root: { type: "string" }, proposed_by_agent_id: { type: "string" }, basis: { type: "string", enum: ["OBSERVED_EVIDENCE", "PLANNED_INTENT"] }, base_repo_snapshot_id: { type: "string" }, groups: { type: "array", items: { type: "object" } }, features: { type: "array", items: { type: "object" } }, actor: actorSchema }, required: ["project_root", "features"], additionalProperties: false },
     annotations: mutating,
   },
   {
@@ -331,8 +337,36 @@ export const workspaceTools = [
   {
     name: "product_structure_proposal_apply",
     title: "Confirm or Edit Product Structure Proposal",
-    description: "Agents may update or withdraw a pending proposal, but confirm/reject are permanently blocked at the MCP boundary. Only the authenticated Product View human UI may approve or reject; stale RepoSnapshots remain blocked.",
+    description: "Agents may update or withdraw a pending proposal, but confirm/reject are permanently blocked at the MCP boundary. Only the authenticated Product View human UI may approve or reject; OBSERVED_EVIDENCE stale RepoSnapshots remain blocked while PLANNED_INTENT proposals survive normal coding drift.",
     inputSchema: { type: "object", properties: { project_root: { type: "string" }, proposal_id: { type: "string" }, expected_version: { type: "integer", minimum: 1 }, action: { type: "string", enum: ["confirm", "update", "reject"] }, patch: { type: "object" }, actor: actorSchema }, required: ["project_root", "proposal_id", "action"], additionalProperties: false },
+    annotations: mutating,
+  },
+  {
+    name: "development_context_get",
+    title: "Read relevant Development context",
+    description: "Read the deterministic project, current Change, target Features, relevant Evidence, latest RepoSnapshot, linked records, and recent semantic milestones needed for an Agent to continue work.",
+    inputSchema: { type: "object", properties: { project_root: { type: "string" }, change_id: { type: "string" }, feature_id: { type: "string" }, include_evidence: { type: "boolean" } }, required: ["project_root"], additionalProperties: false },
+    annotations: readOnly,
+  },
+  {
+    name: "development_start",
+    title: "Start semantic Development tracking",
+    description: "Begin tracking a meaningful product development milestone. This records project state only; it does not approve or start an Execution and does not require a target Feature.",
+    inputSchema: { type: "object", properties: { project_root: { type: "string" }, change_id: { type: "string" }, id: { type: "string" }, title: { type: "string" }, goal: { type: "string" }, target_feature_ids: { type: "array", items: { type: "string" } }, summary: { type: "string" }, progress_items: { type: "array", items: { type: "object" } }, event_id: { type: "string" }, expected_change_version: { type: "integer", minimum: 1 }, blocking: { type: ["object", "string", "null"] }, user_action_required: { type: "boolean" }, agent: developmentActorSchema, actor: developmentActorSchema }, required: ["project_root", "goal", "event_id"], additionalProperties: false },
+    annotations: mutating,
+  },
+  {
+    name: "development_update",
+    title: "Report a semantic Development milestone",
+    description: "Persist a meaningful Development status update with optimistic Change versioning. Send summaries or explicit progress items, not file/tool telemetry or private reasoning.",
+    inputSchema: { type: "object", properties: { project_root: { type: "string" }, change_id: { type: "string" }, event_id: { type: "string" }, expected_change_version: { type: "integer", minimum: 1 }, status: developmentStatusSchema, summary: { type: "string" }, progress_items: { type: "array", items: { type: "object" } }, blocking: { type: ["object", "string", "null"] }, user_action_required: { type: "boolean" }, agent: developmentActorSchema, actor: developmentActorSchema }, required: ["project_root", "change_id", "event_id", "expected_change_version", "status", "summary"], additionalProperties: false },
+    annotations: mutating,
+  },
+  {
+    name: "development_result",
+    title: "Report a Development result",
+    description: "Persist implementation, verification, remaining-issue, and optional acceptance reports with provenance. Agent reports remain distinct from observed repo facts and Human UI confirmation.",
+    inputSchema: { type: "object", properties: { project_root: { type: "string" }, change_id: { type: "string" }, event_id: { type: "string" }, expected_change_version: { type: "integer", minimum: 1 }, status: developmentStatusSchema, summary: { type: "string" }, implementation_report: {}, verification_report: {}, remaining_issues: { type: "array" }, implementation_evidence: { type: "array" }, human_acceptance: {}, agent: developmentActorSchema, actor: developmentActorSchema }, required: ["project_root", "change_id", "event_id", "expected_change_version", "summary"], additionalProperties: false },
     annotations: mutating,
   },
   {
@@ -573,7 +607,7 @@ export async function callWorkspaceTool(name, args, httpService) {
     return content(`Feature “${result.feature.name}” corrected as Human Intent at v${result.feature.version}.`, { feature: result.feature, correction: result.correction, productMap: summarizeProductMap(result.model), path: result.path });
   }
   if (name === "product_structure_propose") {
-    const proposal = await createProductStructureProposal(args.project_root, { projectId: args.project_id, proposedByAgentId: args.proposed_by_agent_id, baseRepoSnapshotId: args.base_repo_snapshot_id, groups: args.groups, features: args.features, now: args.now });
+    const proposal = await createProductStructureProposal(args.project_root, { projectId: args.project_id, basis: args.basis, proposedByAgentId: args.proposed_by_agent_id, baseRepoSnapshotId: args.base_repo_snapshot_id, groups: args.groups, features: args.features, now: args.now });
     return content(`Product Structure Proposal “${proposal.id}” is pending Human confirmation.`, { proposal });
   }
   if (name === "product_structure_proposals_get") {
@@ -584,6 +618,47 @@ export async function callWorkspaceTool(name, args, httpService) {
     const result = await applyProductStructureProposal(args.project_root, { proposalId: args.proposal_id, expectedVersion: args.expected_version, action: args.action, patch: args.patch, actor: args.actor, approvalSource: "mcp", now: args.now });
     return content(`Product Structure Proposal “${args.proposal_id}” ${args.action} applied.`, result);
   }
+  if (name === "development_context_get") {
+    const context = await getDevelopmentContext(args.project_root, { changeId: args.change_id, featureId: args.feature_id, includeEvidence: args.include_evidence });
+    return content(context.change ? `Development context for “${context.change.title}”.` : "No active Development context found.", context);
+  }
+  if (name === "development_start") {
+    const result = await startDevelopment(args.project_root, {
+      ...args,
+      changeId: args.change_id,
+      targetFeatureIds: args.target_feature_ids,
+      progressItems: args.progress_items,
+      expectedChangeVersion: args.expected_change_version,
+      userActionRequired: args.user_action_required,
+      agent: args.agent || args.actor,
+    });
+    return content(`Development “${result.change.title}” is ${result.development.status}.`, result);
+  }
+  if (name === "development_update") {
+    const result = await updateDevelopment(args.project_root, {
+      ...args,
+      changeId: args.change_id,
+      expectedChangeVersion: args.expected_change_version,
+      progressItems: args.progress_items,
+      userActionRequired: args.user_action_required,
+      agent: args.agent || args.actor,
+    });
+    return content(`Development “${result.change.title}” is ${result.development.status}.`, result);
+  }
+  if (name === "development_result") {
+    const result = await reportDevelopmentResult(args.project_root, {
+      ...args,
+      changeId: args.change_id,
+      expectedChangeVersion: args.expected_change_version,
+      implementationReport: args.implementation_report,
+      verificationReport: args.verification_report,
+      remainingIssues: args.remaining_issues,
+      implementationEvidence: args.implementation_evidence,
+      humanAcceptance: args.human_acceptance,
+      agent: args.agent || args.actor,
+    });
+    return content(`Development “${result.change.title}” reported ${result.development.status}.`, result);
+  }
   if (name === "my_whiteboard_info") {
     let sourceRevision = null;
     try { sourceRevision = (await import("node:child_process")).execFileSync("git", ["-C", ROOT, "rev-parse", "HEAD"], { encoding: "utf8", windowsHide: true }).trim() || null; } catch {}
@@ -592,10 +667,10 @@ export async function callWorkspaceTool(name, args, httpService) {
       sourceRevision,
       schemaVersion: 1,
       toolCount: workspaceTools.length,
-      capabilities: { productGrounding: true, productView: true, productStructureProposal: true, changeExecution: true, hostedExecution: true, verification: true },
+      capabilities: { productGrounding: true, productView: true, productStructureProposal: true, changeExecution: true, hostedExecution: true, verification: true, developmentState: true, milestoneSync: true, crossAgentStateHandoff: true, plannedProductStructure: true },
       supportedRepoHints: { fullProductGrounding: [".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".html", ".css"], observedExtensions: [".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".html", ".css", ".prisma", ".sql"], knownUnsupported: ["Python-only product grounding", "SQLite binary parsing"] },
-      toolCategories: { workspace: ["project_create", "project_get", "workspace_get", "workspace_get_changes", "workspace_open"], product: ["product_grounding_scan", "product_grounding_get", "product_feature_correct", "product_structure_propose", "product_structure_proposals_get", "product_structure_proposal_apply"], board: ["board_create", "board_get", "board_apply", "code_board_create", "code_board_analyze"], collaboration: ["agent_connect", "agent_sync", "handoff_create", "handoff_update", "message_send", "messages_get"], change: ["change_create", "change_get"], execution: ["execution_capabilities", "execution_start", "execution_claim", "execution_report", "execution_get", "execution_stop", "execution_resume"], verification: ["verification_observe", "verification_compare"] },
-      recommendedFlows: { understandProject: ["project_create", "product_grounding_scan", "if NEEDS_INTERPRETATION/PARTIAL: host-agent interprets Evidence", "product_structure_propose", "STOP: ask the user to review Product View", "Human confirms or rejects in Product View", "product_structure_proposals_get: read the confirmed ProductModel"], inspectCodeArchitecture: ["project_create", "code_board_create", "code_board_analyze", "workspace_open Technical Board"] },
+      toolCategories: { workspace: ["project_create", "project_get", "workspace_get", "workspace_get_changes", "workspace_open"], product: ["product_grounding_scan", "product_grounding_get", "product_feature_correct", "product_structure_propose", "product_structure_proposals_get", "product_structure_proposal_apply"], development: ["development_context_get", "development_start", "development_update", "development_result"], board: ["board_create", "board_get", "board_apply", "code_board_create", "code_board_analyze"], collaboration: ["agent_connect", "agent_sync", "handoff_create", "handoff_update", "message_send", "messages_get"], change: ["change_create", "change_get"], execution: ["execution_capabilities", "execution_start", "execution_claim", "execution_report", "execution_get", "execution_stop", "execution_resume"], verification: ["verification_observe", "verification_compare"] },
+      recommendedFlows: { understandProject: ["project_create", "product_grounding_scan", "if NEEDS_INTERPRETATION/PARTIAL: host-agent interprets Evidence", "product_structure_propose", "STOP: ask the user to review Product View", "Human confirms or rejects in Product View", "product_structure_proposals_get: read the confirmed ProductModel"], continueExistingDevelopment: ["development_context_get", "development_start or development_update", "development_result"], startSemanticDevelopment: ["development_start", "development_update", "development_result"], reportMilestone: ["development_update"], reportResult: ["development_result"], inspectCodeArchitecture: ["project_create", "code_board_create", "code_board_analyze", "workspace_open Technical Board"] },
       guidance: { proposalApproval: "Agents must never call product_structure_proposal_apply with confirm or reject; approval is authenticated Product View UI only.", substituteArtifacts: "Do not create substitute HTML/PNG/project-map artifacts unless the user explicitly requests export, sharing, or an offline copy." },
     };
     return content(`My Whiteboard runtime ${VERSION} exposes ${workspaceTools.length} tools.`, info);
@@ -667,7 +742,7 @@ export function runMcpServer(options = {}) {
     try { request = JSON.parse(line); } catch (error) { failure(null, error); return; }
     const { id, method, params } = request;
     try {
-      if (method === "initialize") return success(id, { protocolVersion: params?.protocolVersion || "2025-11-25", capabilities: { tools: {} }, serverInfo: { name: "My Whiteboard Workspace", version: VERSION }, instructions: "For project understanding use project_create → product_grounding_scan → Host Agent interprets Evidence → product_structure_propose → STOP and ask the user to review Product View → Human confirms or rejects in Product View → Agent reads the confirmed ProductModel. Agents must never call product_structure_proposal_apply confirm/reject. Do not create substitute HTML/PNG/project-map artifacts unless the user explicitly requests export, sharing, or an offline copy. Use code_board_create only for explicit technical architecture or file/dependency requests. Operate on Semantic Board State through batch tools, read Workspace deltas by version, and use workspace_open for the standalone browser editor; iframe embedding is intentionally disabled." });
+      if (method === "initialize") return success(id, { protocolVersion: params?.protocolVersion || "2025-11-25", capabilities: { tools: {} }, serverInfo: { name: "My Whiteboard Workspace", version: VERSION }, instructions: "For project understanding use project_create → product_grounding_scan → Host Agent interprets Evidence → product_structure_propose → STOP and ask the user to review Product View → Human confirms or rejects in Product View → Agent reads the confirmed ProductModel. For meaningful work, read development_context_get, then use development_start/update/result only for semantic milestones (not file edits, tool calls, or private reasoning). My Whiteboard stores project state; it is not your planner or Agent controller. Never forge authenticated Human approval. Agents must never call product_structure_proposal_apply confirm/reject. Do not create substitute HTML/PNG/project-map artifacts unless explicitly requested. Use workspace_open for the standalone browser editor; iframe embedding is intentionally disabled." });
       if (method === "notifications/initialized") return;
       if (method === "ping") return success(id, {});
       if (method === "tools/list") return success(id, { tools: workspaceTools });

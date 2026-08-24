@@ -66,9 +66,9 @@ test("stale Product Structure Proposal cannot be silently confirmed", async () =
 });
 
 test("runtime truth exposes the actual MCP surface and product-first flow", async () => {
-  assert.equal(workspaceTools.length, 46);
+  assert.equal(workspaceTools.length, 50);
   const result = await callWorkspaceTool("my_whiteboard_info", {});
-  assert.equal(result.structuredContent.toolCount, 46);
+  assert.equal(result.structuredContent.toolCount, 50);
   assert.equal(result.structuredContent.declaredVersion, "0.2.0-alpha.3");
   assert.ok(result.structuredContent.capabilities.productStructureProposal);
   assert.ok(result.structuredContent.recommendedFlows.understandProject.includes("product_grounding_scan"));

@@ -20,14 +20,8 @@ const LOCK_TIMEOUT_MS = 7_500;
 const STALE_LOCK_MS = 30_000;
 
 /**
- * Agent presence timeout in milliseconds.
- *
- * When readWorkspace returns an Agent whose lastSeenAt is older than this
- * threshold (or missing/invalid), the returned status is overridden to
- * "offline". This is a pure read-time computation — the persisted value in
- * workspace.json is never changed, workspaceVersion is never advanced, and no
- * event is emitted. Only a real agent_connect / agent_sync call refreshes
- * lastSeenAt and restores the persisted status.
+ * Retained for backwards-compatible imports. Phase 3 deliberately does not
+ * use timestamp age as proof that an external Agent process is offline.
  */
 export const PRESENCE_TIMEOUT_MS = 5 * 60 * 1000;
 
@@ -128,26 +122,17 @@ export async function createProjectWorkspace(projectRoot, options = {}) {
 }
 
 /**
- * Override persisted Agent status to "offline" when lastSeenAt is older than
- * PRESENCE_TIMEOUT_MS, missing, or unparseable. This is a read-time
- * computation only — it mutates the in-memory clone returned to callers but
- * never touches workspace.json on disk, never advances workspaceVersion, and
- * never emits an event.
- *
- * Safe defaults: missing / invalid / unparseable lastSeenAt → "offline".
+ * Add an honest read-time connection projection without rewriting persisted
+ * Agent state. A semantic sync timestamp is useful history, but without a
+ * trusted process/transport signal the current connection remains UNKNOWN.
  */
 function applyRuntimePresence(workspace) {
-  const now = Date.now();
   const agents = workspace.entities?.agents;
   if (!agents || typeof agents !== "object") return workspace;
   for (const agent of Object.values(agents)) {
-    let lastSeenMs = NaN;
-    if (agent.lastSeenAt) {
-      try { lastSeenMs = new Date(agent.lastSeenAt).getTime(); } catch { lastSeenMs = NaN; }
-    }
-    if (!Number.isFinite(lastSeenMs) || now - lastSeenMs > PRESENCE_TIMEOUT_MS) {
-      agent.status = "offline";
-    }
+    if (!agent.lastSyncAt && agent.lastSeenAt) agent.lastSyncAt = agent.lastSeenAt;
+    const source = String(agent.connectionStateSource || "").toUpperCase();
+    if (!source || !["PROCESS_ADAPTER", "TRUSTED_HOST", "TRUSTED_ADAPTER"].includes(source)) agent.connectionState = "UNKNOWN";
   }
   return workspace;
 }
@@ -162,7 +147,7 @@ export async function readWorkspace(projectRoot) {
   if (workspace.project.root !== resolved) {
     workspace.project.root = resolved;
   }
-  // Infer runtime Agent presence from lastSeenAt recency.
+  // Preserve last sync history, but never infer liveness from timestamp age.
   applyRuntimePresence(workspace);
   return workspace;
 }
@@ -209,6 +194,7 @@ function eventFor({ transactionId, workspaceVersion, index, type, collection, en
     workspaceVersion,
     index,
     type,
+    ...(collection ? { collection } : {}),
     entityType: collection ? collection.slice(0, -1) : "workspace",
     entityId,
     actor,

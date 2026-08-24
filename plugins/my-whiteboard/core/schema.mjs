@@ -25,6 +25,7 @@ export const HANDOFF_STATUSES = new Set(["open", "accepted", "completed", "cance
 export const MESSAGE_KINDS = new Set(["update", "request", "response", "conflict", "system"]);
 export const CHANGE_STATUSES = new Set(["draft", "approved", "executing", "completed", "interrupted", "failed", "cancelled"]);
 export const EXECUTION_STATUSES = new Set(["queued", "running", "completed", "interrupted", "failed", "cancelled"]);
+export const DEVELOPMENT_STATUSES = new Set(["IN_PROGRESS", "WAITING_FOR_USER", "VERIFYING", "READY_FOR_REVIEW", "ACCEPTED", "PAUSED"]);
 
 const ENTITY_DEFAULTS = Object.freeze({
   contexts: { kind: "project", title: "Context", content: "", sources: [], tags: [] },
@@ -258,6 +259,13 @@ export function validateDomainEntity(collection, entity, workspace) {
     if (!entity.contract || typeof entity.contract !== "object" || Array.isArray(entity.contract)) throw new ValidationError("Change contract must be an object.", { entityId: entity.id });
     if (!Array.isArray(entity.acceptanceCriteria) || entity.acceptanceCriteria.some((value) => typeof value !== "string")) throw new ValidationError("Change acceptanceCriteria must be an array of strings.", { entityId: entity.id });
     if (!Array.isArray(entity.constraints) || entity.constraints.some((value) => typeof value !== "string")) throw new ValidationError("Change constraints must be an array of strings.", { entityId: entity.id });
+    if (entity.development !== undefined) {
+      if (!entity.development || typeof entity.development !== "object" || Array.isArray(entity.development)) throw new ValidationError("Change development must be an object.", { entityId: entity.id });
+      if (Number(entity.development.schemaVersion || 1) !== 1) throw new ValidationError("Unsupported Change development schema.", { entityId: entity.id });
+      if (!DEVELOPMENT_STATUSES.has(entity.development.status)) throw new ValidationError(`Invalid Change development status: ${entity.development.status}`, { entityId: entity.id });
+      if (entity.development.progressItems !== undefined && !Array.isArray(entity.development.progressItems)) throw new ValidationError("Change development progressItems must be an array.", { entityId: entity.id });
+      if (entity.development.lastEventId !== undefined && typeof entity.development.lastEventId !== "string") throw new ValidationError("Change development lastEventId must be a string.", { entityId: entity.id });
+    }
   }
   if (collection === "executions") {
     requireText(entity, "changeId", collection);

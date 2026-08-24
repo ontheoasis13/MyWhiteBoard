@@ -6,14 +6,15 @@ export const PRODUCT_LIFECYCLE_STATES = Object.freeze([
 
 function hasConfirmedStructure(model = {}) {
   const confirmations = model.humanIntent?.productStructureConfirmations || [];
-  const groups = Object.values(model.productHierarchy?.groups || {});
   const features = Object.values(model.features || {});
   return confirmations.some((confirmation) => {
     const proposalId = confirmation?.proposalId;
     if (!proposalId) return false;
-    const confirmedGroups = groups.filter((group) => group.humanIntent?.confirmedFromProposal === proposalId && group.featureIds?.length);
     const confirmedFeatures = features.filter((feature) => feature.humanIntent?.confirmedFromProposal === proposalId);
-    return confirmedGroups.length > 0 && confirmedFeatures.length > 0;
+    // A small planned project may legitimately have Features without an
+    // explicit semantic Product Group. Grouping is an optional hierarchy
+    // layer; confirmed Features are the lifecycle authority.
+    return confirmedFeatures.length > 0;
   });
 }
 

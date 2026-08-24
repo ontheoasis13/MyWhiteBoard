@@ -60,6 +60,10 @@ button { cursor: pointer; }
 .freshness-banner div { display: flex; flex-direction: column; gap: 3px; }
 .freshness-banner strong { font-size: 12px; }
 .freshness-banner span { color: #9a7b38; font-size: 11px; }
+.active-development-card { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; width: 100%; margin: 10px 0 14px; padding: 14px 16px; border: 1px solid #cfe0f4; border-left: 3px solid #3e82c4; border-radius: 12px; color: #38506e; background: #f7fbff; text-align: left; cursor: pointer; }
+.active-development-card strong { font-size: 14px; }
+.active-development-card > span:not(.node-kind) { color: #61748f; font-size: 12px; }
+.active-development-card small { color: #8798ad; font-size: 11px; }
 .product-view, .board-view, .changes-view { padding: 9px 25px 32px; }
 .view-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; padding: 15px 0 13px; }
 .view-heading h1 { margin: 6px 0 4px; color: #253249; font-size: 25px; letter-spacing: -.035em; }
@@ -119,6 +123,15 @@ button { cursor: pointer; }
 .large-icon { width: 42px; height: 42px; display: grid; place-items: center; margin: 0 auto 14px; border-radius: 12px; color: #5e54d3; background: #eeecff; font-size: 24px; }
 .changes-card h2 { margin: 0 0 8px; color: #344158; font-size: 18px; }
 .changes-card p { margin: 0 auto 18px; color: #8490a2; font-size: 12px; line-height: 1.6; }
+.development-fact-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 0 0 18px; text-align: left; }
+.development-fact-grid span { padding: 9px; border: 1px solid #edf0f5; border-radius: 8px; color: #6e7c91; background: #fafbfd; font-size: 11px; }
+.product-main:has(.development-view) > .changes-view { display: none; }
+.development-view { padding: 16px 25px 28px; }
+.development-card { max-width: 760px; padding: 22px; border: 1px solid #dfe7f1; border-radius: 15px; background: #fff; box-shadow: 0 10px 25px rgba(35, 49, 73, .05); }
+.development-card-header { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; }
+.development-card-header strong { flex: 1 1 260px; color: #344158; font-size: 18px; }
+.development-card > p { margin: 16px 0; color: #596a81; font-size: 13px; line-height: 1.7; }
+.development-honesty { display: flex; gap: 12px; color: #8997a9; font-size: 11px; }
 .change-count { padding-top: 13px; border-top: 1px solid #edf0f4; color: #909bab; font-size: 11px; }
 .change-count strong { color: #5d54d1; }
 .inspector-panel { grid-area: inspector; min-height: 0; overflow: auto; padding: 22px 20px 40px; background: #fbfcfe; }

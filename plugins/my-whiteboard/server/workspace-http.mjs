@@ -19,6 +19,8 @@ import {
   applyProductStructureProposal,
   deriveProductLifecycleState,
   productStructureStatusForLifecycle,
+  getDevelopmentContext,
+  acceptDevelopment,
 } from "../core/index.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -189,6 +191,24 @@ export function createWorkspaceHttpService(options = {}) {
         }
         if (req.method === "GET" && url.pathname === "/api/session/changes") {
           return sendJson(res, 200, await getChangesSince(session.projectRoot, Number(url.searchParams.get("since") || 0)));
+        }
+        if (req.method === "GET" && url.pathname === "/api/session/development") {
+          const context = await getDevelopmentContext(session.projectRoot, {});
+          const active = context.changes.filter((change) => ["IN_PROGRESS", "WAITING_FOR_USER", "VERIFYING", "READY_FOR_REVIEW", "PAUSED"].includes(change.developmentProjection?.status));
+          const accepted = context.changes.filter((change) => change.developmentProjection?.status === "ACCEPTED");
+          return sendJson(res, 200, { ...context, activeChanges: active, recentCompletedChanges: accepted, primaryDevelopment: active[0]?.developmentProjection || accepted[0]?.developmentProjection || null });
+        }
+        if (req.method === "GET" && url.pathname.startsWith("/api/session/development/")) {
+          const changeId = decodeURIComponent(url.pathname.slice("/api/session/development/".length));
+          const context = await getDevelopmentContext(session.projectRoot, { changeId });
+          if (!context.change) return sendJson(res, 404, { error: { code: "NOT_FOUND", message: "Development Change not found." } });
+          return sendJson(res, 200, context);
+        }
+        if (req.method === "POST" && url.pathname.startsWith("/api/session/development/") && url.pathname.endsWith("/accept")) {
+          const changeId = decodeURIComponent(url.pathname.slice("/api/session/development/".length, -"/accept".length));
+          const body = await jsonBody(req);
+          const result = await acceptDevelopment(session.projectRoot, { ...body, changeId, actor: { id: "human", displayName: "用户", client: "product-view", identityTrust: "TRUSTED_ADAPTER" } });
+          return sendJson(res, 200, result);
         }
         if (req.method === "POST" && url.pathname === "/api/session/transaction") {
           const body = await jsonBody(req);
